@@ -11,9 +11,62 @@
 
 #include "ckoz0014.h"
 
-bool usb_start(xc_callback_fn callback);
-void usb_handle_events_timeout(struct timeval* tv);
-void usb_stop();
-int usb_send(const char* buffer, size_t length);
+#define INTR_LENGTH		19
+#define INTR_SEND_LENGTH	32
+
+class USB
+{
+public:
+
+    USB();
+
+    virtual int Init(int epoll_fd);
+    virtual void Stop();
+
+    virtual void Poll(const epoll_event& event);
+    int Send(const char* buffer, size_t length);
+
+private:
+
+    static void message_received(void* user_data,
+				 mci_rx_event event,
+				 int datapoint,
+				 mci_rx_datatype data_type,
+				 int value,
+				 int signal,
+				 mci_battery_status battery);
+
+    virtual void MessageReceived(mci_rx_event event,
+				 int datapoint,
+				 mci_rx_datatype data_type,
+				 int value,
+				 int signal,
+				 mci_battery_status battery) {}
+
+    static void sent(struct libusb_transfer* transfer);
+    static void received(struct libusb_transfer* transfer);
+
+    void Sent(struct libusb_transfer* transfer);
+    void Received(struct libusb_transfer* transfer);
+
+    static void fd_added(int fd, short fd_events, void* source);
+    static void fd_removed(int fd, void* source);
+
+    void FDAdded(int fd, short fd_events);
+    void FDRemoved(int fd);
+
+    bool init_fds();
+
+    int epoll_fd;
+
+    libusb_context* context;
+    libusb_device_handle* handle;
+
+    unsigned char recvbuf[INTR_LENGTH];
+    libusb_transfer* recv_transfer;
+
+    unsigned char sendbuf[INTR_SEND_LENGTH];
+    libusb_transfer* send_transfer;
+};
 
 #endif

@@ -66,7 +66,7 @@ const char* xc_battery_status_name(enum mci_battery_status state)
     }
 }
 
-void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback)
+void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback, void* user_data)
 {
     struct xc_ci_message* msg = (struct xc_ci_message*) buffer;
 
@@ -80,7 +80,8 @@ void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback)
     {
     case MCI_PT_RX:
     {
-	callback((enum mci_rx_event) msg->packet_rx.rx_event,
+	callback(user_data,
+		 (enum mci_rx_event) msg->packet_rx.rx_event,
 		 msg->packet_rx.datapoint,
 		 (enum mci_rx_datatype) msg->packet_rx.rx_data_type,
 		 msg->packet_rx.value,

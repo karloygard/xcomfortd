@@ -17,7 +17,7 @@
 enum mci_pt_action
 {
     MCI_PT_TX           = 0xB1,
-    MCI_PT_UNKNOWN      = 0xB2, // Packet length 4
+    MCI_PT_UNKNOWN      = 0xB2, // Packet length 4, looks like some sort of ping
     MCI_PT_RX           = 0xC1,
     MCI_PT_ACK          = 0xC3
 };
@@ -31,9 +31,8 @@ enum mci_tx_event
     REQUEST_STATUS      = 0x0b, // Requests MSG_STATUS event from the datapoint
     SET_PERCENT         = 0x0c,
     DIM_STOP_OR_SET     = 0x0d,
-    DIM_START_BOOL      = 0x0e,
+    DIM_START_BOOL      = 0x0e, // value indicates direction
     SET_SSHORT_1COMMA   = 0x11,
-    //S_SSHORT_1COMMA   = 0x1a,
     SET_TIME            = 0x2a,
     SET_DATE            = 0x2b,
     SET_TEMP_KNOB       = 0x2c,
@@ -51,7 +50,10 @@ enum mci_tx_event
     SET_DIRECT_ON       = 0xa0
 };
 
-// Events that can be received from datapoints
+/* Events that can be received from datapoints.
+
+   These are events that are known by MRF, they may not all
+   be applicable to datapoints. */
 
 enum mci_rx_event
 {
@@ -100,7 +102,10 @@ enum mci_battery_status
     POWERLINE           = 0x10
 };
 
-// Data types that can be received from a datapoint
+/* Data types that can be received from a datapoint
+
+   These are events that are known by MRF, they may not all
+   be applicable to datapoints. */
 
 enum mci_rx_datatype
 {
@@ -182,14 +187,15 @@ struct xc_ci_message
 
 #pragma pack(pop)
 
-typedef void (*xc_callback_fn)(enum mci_rx_event,
+typedef void (*xc_callback_fn)(void* user_data,
+			       enum mci_rx_event,
 			       int,
 			       enum mci_rx_datatype,
 			       int,
 			       int,
 			       enum mci_battery_status);
 
-void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback);
+void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback, void* user_data);
 
 const char* xc_battery_status_name(enum mci_battery_status state);
 const char* xc_rxevent_name(enum mci_rx_event event);

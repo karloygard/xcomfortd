@@ -19,25 +19,22 @@
 
 #define EP_IN			(1 | LIBUSB_ENDPOINT_IN)
 #define EP_OUT			(2 | LIBUSB_ENDPOINT_OUT)
-#define INTR_LENGTH		19
-#define INTR_SEND_LENGTH	32
 
 extern int do_exit;
-extern int epoll_fd;
 
 bool message_in_transit = false;
 bool waiting_for_ack = false;
 
-static libusb_context* context;
-static struct libusb_device_handle* devh = NULL;
+void
+USB::received(struct libusb_transfer* transfer)
+{
+    USB* this_object = (USB*) transfer->user_data;
 
-static unsigned char recvbuf[INTR_LENGTH];
-static struct libusb_transfer* recv_transfer = NULL;
+    this_object->Received(transfer);
+}
 
-static unsigned char sendbuf[INTR_SEND_LENGTH];
-static struct libusb_transfer* send_transfer = NULL;
-
-static void LIBUSB_CALL cb_recv(struct libusb_transfer* transfer)
+void
+USB::Received(struct libusb_transfer* transfer)
 {
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
     {
@@ -46,19 +43,47 @@ static void LIBUSB_CALL cb_recv(struct libusb_transfer* transfer)
 	do_exit = 2;
 	libusb_free_transfer(transfer);
 	recv_transfer = NULL;
-
-	return;
     }
+    else
+    {
+	xc_parse_packet((char*) transfer->buffer, transfer->length, message_received, this);
 
-    xc_parse_packet((char*) transfer->buffer, transfer->length, (xc_callback_fn) transfer->user_data);
-
-    // Resubmit transfer
+	// Resubmit transfer
     
-    if (libusb_submit_transfer(recv_transfer) < 0)
-	do_exit = 2;
+	if (libusb_submit_transfer(recv_transfer) < 0)
+	    do_exit = 2;
+    }
 }
 
-static void LIBUSB_CALL cb_send(struct libusb_transfer* transfer)
+void
+USB::message_received(void* user_data,
+		      mci_rx_event event,
+		      int datapoint,
+		      mci_rx_datatype data_type,
+		      int value,
+		      int signal,
+		      mci_battery_status battery)
+{
+    USB* this_object = (USB*) user_data;
+
+    this_object->MessageReceived(event,
+				 datapoint,
+				 data_type,
+				 value,
+				 signal,
+				 battery);
+}
+
+void
+USB::sent(struct libusb_transfer* transfer)
+{
+    USB* this_object = (USB*) transfer->user_data;
+
+    this_object->Sent(transfer);
+}
+
+void
+USB::Sent(struct libusb_transfer* transfer)
 {
     message_in_transit = false;
 
@@ -74,7 +99,16 @@ static void LIBUSB_CALL cb_send(struct libusb_transfer* transfer)
     }
 }
 
-static void usb_fd_added_cb(int fd, short fd_events, void * source)
+void
+USB::fd_added(int fd, short fd_events, void * source)
+{
+    USB* this_object = (USB*) source;
+
+    this_object->FDAdded(fd, fd_events);
+}
+
+void
+USB::FDAdded(int fd, short fd_events)
 {
     epoll_event events;
 
@@ -88,33 +122,55 @@ static void usb_fd_added_cb(int fd, short fd_events, void * source)
         fprintf(stderr, "epoll_ctl failed %s\n", strerror(errno));
 }
 
-static void usb_fd_removed_cb(int fd, void* source)
+void
+USB::fd_removed(int fd, void* source)
+{
+    USB* this_object = (USB*) source;
+
+    this_object->FDRemoved(fd);
+}
+
+void
+USB::FDRemoved(int fd)
 {
     if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL) < 0)
         fprintf(stderr, "epoll_ctl failed %s\n", strerror(errno));
 }
 
-int usb_init_fds(libusb_context* context)
+bool
+USB::init_fds()
 {
     const struct libusb_pollfd** usb_fds = libusb_get_pollfds(context);
     
     if (!usb_fds)
-	return -1;
+	return false;
     
     for (int numfds = 0; usb_fds[numfds] != NULL; ++numfds)
-	usb_fd_added_cb(usb_fds[numfds]->fd, usb_fds[numfds]->events, NULL);
+	FDAdded(usb_fds[numfds]->fd, usb_fds[numfds]->events);
     
     free(usb_fds);
     
-    libusb_set_pollfd_notifiers(context, usb_fd_added_cb, usb_fd_removed_cb, NULL);
+    libusb_set_pollfd_notifiers(context, fd_added, fd_removed, this);
 
-    return 0;
+    return true;
 }
 
-bool usb_start(xc_callback_fn callback)
+USB::USB()
+    : epoll_fd(-1),
+      context(NULL),
+      handle(NULL),
+      recv_transfer(NULL),
+      send_transfer(NULL)
+{
+}
+
+int
+USB::Init(int fd)
 {
     int err;
     
+    epoll_fd = fd;
+
     err = libusb_init(&context);
     if (err < 0)
     {
@@ -122,16 +178,16 @@ bool usb_start(xc_callback_fn callback)
 	exit(1);
     }
     
-    devh = libusb_open_device_with_vid_pid(context, 0x188a, 0x1101);
-    if (!devh)
+    handle = libusb_open_device_with_vid_pid(context, 0x188a, 0x1101);
+    if (!handle)
     {
 	fprintf(stderr, "Could not find/open xComfort USB device\n");
 	return false;
     }
     
-    if (libusb_kernel_driver_active(devh, 0) == 1)
+    if (libusb_kernel_driver_active(handle, 0) == 1)
     {
-	err = libusb_detach_kernel_driver(devh, 0);
+	err = libusb_detach_kernel_driver(handle, 0);
 	if (err < 0)
 	{
 	    fprintf(stderr, "usb_detach_kernel_driver %d\n", err);
@@ -139,14 +195,14 @@ bool usb_start(xc_callback_fn callback)
 	}
     }
     
-    err = libusb_set_configuration(devh, 1); 
+    err = libusb_set_configuration(handle, 1); 
     if (err < 0)
     { 
 	fprintf(stderr, "libusb_set_configuration error %d\n", err); 
 	return false;
     } 
     
-    err = libusb_claim_interface(devh, 0);
+    err = libusb_claim_interface(handle, 0);
     if (err < 0)
     {
 	fprintf(stderr, "usb_claim_interface error %d\n", err);
@@ -160,8 +216,8 @@ bool usb_start(xc_callback_fn callback)
 	return false;
     }
     
-    libusb_fill_interrupt_transfer(recv_transfer, devh, EP_IN, recvbuf,
-				   sizeof(recvbuf), cb_recv, (void*) callback, 0);
+    libusb_fill_interrupt_transfer(recv_transfer, handle, EP_IN, recvbuf,
+				   sizeof(recvbuf), received, (void*) this, 0);
     
     send_transfer = libusb_alloc_transfer(0);
     if (!send_transfer)
@@ -170,8 +226,8 @@ bool usb_start(xc_callback_fn callback)
 	return false;
     }
     
-    libusb_fill_interrupt_transfer(send_transfer, devh, EP_OUT, sendbuf,
-				   sizeof(sendbuf), cb_send, NULL, 0);
+    libusb_fill_interrupt_transfer(send_transfer, handle, EP_OUT, sendbuf,
+				   sizeof(sendbuf), sent, this, 0);
 
     err = libusb_submit_transfer(recv_transfer);
     if (err < 0)
@@ -181,18 +237,23 @@ bool usb_start(xc_callback_fn callback)
     if (err < 0)
 	return false;
     
-    usb_init_fds(context);
+    if (!init_fds())
+	return false;
 
     return true;
 }
 
-void usb_handle_events_timeout(struct timeval* tv)
+void
+USB::Poll(const epoll_event& event)
 {
-    libusb_handle_events_timeout(context, tv);
+    struct timeval tv = { 0, 0 };
+
+    libusb_handle_events_timeout(context, &tv);
 }
 
 
-int usb_send(const char* buffer, size_t length)
+int
+USB::Send(const char* buffer, size_t length)
 {
     int err;
 
@@ -209,7 +270,8 @@ int usb_send(const char* buffer, size_t length)
     return 0;
 }
 
-void usb_stop()
+void
+USB::Stop()
 {
     if (recv_transfer)
 	if (!libusb_cancel_transfer(recv_transfer))
@@ -229,10 +291,10 @@ void usb_stop()
     if (send_transfer)
 	libusb_free_transfer(send_transfer);
 
-    if (devh)
+    if (handle)
     {
-	libusb_release_interface(devh, 0);
-	libusb_close(devh);
+	libusb_release_interface(handle, 0);
+	libusb_close(handle);
     }
 
     libusb_exit(NULL);
