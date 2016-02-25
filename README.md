@@ -15,20 +15,20 @@ for that, as the benefits were limited.
 A simple application for forwarding events to and from an MQTT server
 is provided.  The application subscribes to the topics:
 
-   "+/set/dimmer" (accepts values from 0-100)
-   "+/set/switch" (accepts true or false)
+    "+/set/dimmer" (accepts values from 0-100)
+    "+/set/switch" (accepts true or false)
 
 and publishes on the topics:
 
     "[datapoint number]/get/dimmer" (value from 0-100)
     "[datapoint number]/get/switch" (true or false)
 
-Sending "true" to topic "1/set/switch" will send a message to
+Sending `true` to topic `1/set/switch` will send a message to
 datapoint 1 to turn on.  This will work for both switches and dimmers.
-Sending the value "50" to "1/set/dimmer" will send a message to
+Sending the value `50` to `1/set/dimmer` will send a message to
 datapoint 1 to set 50% dimming.  This will work only for dimmers.
 
-Likewise, "1/get/dimmer" and "1/get/switch" will be set to the value
+Likewise, `1/get/dimmer` and `1/get/switch` will be set to the value
 reported by the dimmer/switch, if and when datapoint 1 reports
 changes.  Status reports are not routed in the xComfort network, so if
 your CI stick is not able to reach all devices, these status messages
