@@ -24,7 +24,13 @@ public:
     virtual void Stop();
 
     virtual void Poll(const epoll_event& event);
+
+    bool CanSend() const { return !message_in_transit; }
     int Send(const char* buffer, size_t length);
+
+protected:
+
+    virtual void TrySendMore() {}
 
 private:
 
@@ -56,6 +62,8 @@ private:
     void FDRemoved(int fd);
 
     bool init_fds();
+
+    bool message_in_transit;
 
     int epoll_fd;
 

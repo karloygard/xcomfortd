@@ -37,11 +37,12 @@ long getmseconds()
     struct timespec tp;
 
     clock_gettime(CLOCK_MONOTONIC_COARSE, &tp);
-    return (tp.tv_sec * 1000) + (tp.tv_nsec / 1000000);
+    return long(tp.tv_sec * 1000) + (tp.tv_nsec / 1000000);
 }
 
 MQTTGateway::MQTTGateway()
-    : mosq(NULL)
+    : mosq(NULL),
+      change_buffer(NULL)
 {
 }
 
@@ -83,6 +84,13 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
 		fprintf(stderr, "failed to publish message\n");
+
+	    for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
+		if (dp->datapoint == datapoint)
+		{
+		    dp->buffer_until = 0;
+		    break;
+		}
 	}
 	break;
 
@@ -92,25 +100,88 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 }
 
 void
-MQTTGateway::set_boolean(int datapoint, int value)
+MQTTGateway::set_value(int datapoint, int value, bool boolean)
 {
-    char buffer[9];
+    datapoint_change* dp = change_buffer;
 
-    printf("setting %d to %d\n", datapoint, value);
+    for (; dp; dp = dp->next)
+	if (dp->datapoint == datapoint)
+	    break;
 
-    xc_make_switch_msg(buffer, datapoint, value != 0);
-    Send(buffer, 9);
+    if (dp)
+	// This is already a known datapoint
+
+	dp->value = value;
+    else
+    {
+	dp = new datapoint_change;
+
+	if (!dp)
+	    return;
+
+	dp->next = change_buffer;
+	dp->datapoint = datapoint;
+	dp->value = value;
+	dp->boolean = boolean;
+	dp->buffer_until = 0;
+	change_buffer = dp;
+    }
+
+    TrySendMore();
 }
 
 void
-MQTTGateway::set_value(int datapoint, int value)
+MQTTGateway::TrySendMore()
 {
-    char buffer[9];
+    if (CanSend())
+    {
+	long current_time = getmseconds();
 
-    printf("setting %d to %d\n", datapoint, value);
+	datapoint_change* dp = change_buffer;
+	datapoint_change* prev = NULL;
 
-    xc_make_setpercent_msg(buffer, datapoint, value);
-    Send(buffer, 9);
+	while (dp)
+	{
+	    if (dp->buffer_until <= current_time)
+	    {
+		// Time to inspect
+
+		if (dp->value != -1)
+		{
+		    char buffer[9];
+
+		    if (dp->boolean)
+			xc_make_switch_msg(buffer, dp->datapoint, dp->value != 0);
+		    else
+			xc_make_setpercent_msg(buffer, dp->datapoint, dp->value);
+		    Send(buffer, 9);
+
+		    dp->value = -1;
+		    dp->buffer_until = getmseconds() + 700;
+
+		    return;
+		}
+		else
+		{
+		    // Expired and not updated; delete entry
+
+		    datapoint_change* tmp = dp->next;
+
+		    delete dp;
+
+		    if (prev)
+			dp = prev->next = tmp;
+		    else
+			dp = change_buffer = tmp;
+
+		    continue;
+		}
+	    }
+
+	    prev = dp;
+	    dp = dp->next;
+	}
+    }
 }
 
 void
@@ -142,7 +213,7 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
         else
             value = false;
 
-	set_boolean(datapoint, value);
+	set_value(datapoint, value, true);
     }
     else
     {
@@ -152,12 +223,12 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
 	    errno == ERANGE)
 	    return;
 
-	set_value(datapoint, value);
+	set_value(datapoint, value, false);
     }
 }
 
 int
-MQTTGateway::Init(int epoll_fd)
+MQTTGateway::Init(int epoll_fd, const char* server)
 {
     epoll_event mosquitto_event;
     char clientid[24];
@@ -174,7 +245,7 @@ MQTTGateway::Init(int epoll_fd)
 
     mosquitto_message_callback_set(mosq, mqtt_message);
 
-    err = mosquitto_connect(mosq, mqtt_host, mqtt_port, 60);
+    err = mosquitto_connect(mosq, server, 1883, 60);
 
     if (err)
     {
@@ -213,12 +284,28 @@ MQTTGateway::Stop()
     mosquitto_lib_cleanup();
 }
 
-void
+long
 MQTTGateway::Prepoll(int epoll_fd)
 {
+    long timeout = LONG_MAX;
     epoll_event mosquitto_event;
 
     mosquitto_event.data.ptr = this;
+
+    if (change_buffer)
+    {
+	TrySendMore();
+
+	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
+	    if (dp->value != -1 && timeout > dp->buffer_until)
+		timeout = dp->buffer_until;
+
+	if (timeout != LONG_MAX)
+	    timeout -= getmseconds();
+    }
+
+    if (timeout > 500)
+	timeout = 500;
 
     // Mosquitto isn't making this easy
 
@@ -232,6 +319,12 @@ MQTTGateway::Prepoll(int epoll_fd)
 	mosquitto_event.events = EPOLLIN;
 	epoll_ctl(epoll_fd, EPOLL_CTL_MOD, mosquitto_socket(mosq), &mosquitto_event);
     }
+
+    // Should be called "fairly frequently"
+
+    mosquitto_loop_misc(mosq);
+
+    return timeout;
 }
 
 void
@@ -248,23 +341,24 @@ MQTTGateway::Poll(const epoll_event& event)
     }
     else
 	USB::Poll(event);
-
-    // Should be called "fairly frequently"
-
-    mosquitto_loop_misc(mosq);
 }
 
 int
-main(void)
+main(int argc, char* argv[])
 {
     struct sigaction sigact;
     int err;
     int epoll_fd = -1;
     MQTTGateway gateway;
 
+    if (argc != 2)
+    {
+	fprintf(stderr, "Usage %s: [MQTT server]\n", argv[0]);
+    }
+
     epoll_fd = epoll_create(10);
     
-    if (!gateway.Init(epoll_fd))
+    if (!gateway.Init(epoll_fd, argv[1]))
 	goto out;
     
     sigact.sa_handler = sighandler;
@@ -276,14 +370,17 @@ main(void)
     
     while (!do_exit)
     {
+	int events;
 	epoll_event event;
-	
-	gateway.Prepoll(epoll_fd);
+	int timeout = gateway.Prepoll(epoll_fd);
 
-	if (epoll_wait(epoll_fd, &event, 1, 500) < 0)
+	events = epoll_wait(epoll_fd, &event, 1, timeout);
+
+	if (events < 0)
 	    break;
 	
-	gateway.Poll(event);
+	if (events)
+	    gateway.Poll(event);
     }
     
 out:

@@ -22,9 +22,6 @@
 
 extern int do_exit;
 
-bool message_in_transit = false;
-bool waiting_for_ack = false;
-
 void
 USB::received(struct libusb_transfer* transfer)
 {
@@ -85,8 +82,6 @@ USB::sent(struct libusb_transfer* transfer)
 void
 USB::Sent(struct libusb_transfer* transfer)
 {
-    message_in_transit = false;
-
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
     {
 	fprintf(stderr, "irq transfer status %d?\n", transfer->status);
@@ -94,8 +89,12 @@ USB::Sent(struct libusb_transfer* transfer)
 	do_exit = 2;
 	libusb_free_transfer(transfer);
 	send_transfer = NULL;
-	
-	return;
+    }
+    else
+    {
+	message_in_transit = false;
+
+	TrySendMore();
     }
 }
 
@@ -156,7 +155,8 @@ USB::init_fds()
 }
 
 USB::USB()
-    : epoll_fd(-1),
+    : message_in_transit(false),
+      epoll_fd(-1),
       context(NULL),
       handle(NULL),
       recv_transfer(NULL),
@@ -266,6 +266,8 @@ USB::Send(const char* buffer, size_t length)
 	fprintf(stderr, "failed to submit transfer\n");
 	return -1;
     }
+
+    message_in_transit = true;
 
     return 0;
 }

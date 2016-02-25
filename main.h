@@ -11,6 +11,15 @@
 
 #include "usb.h"
 
+struct datapoint_change
+{
+    datapoint_change* next;
+    int datapoint;
+    int value;
+    int boolean;
+    long buffer_until;
+};
+
 class MQTTGateway
     : public USB
 {
@@ -18,14 +27,17 @@ public:
 
     MQTTGateway();
 
-    virtual int Init(int epoll_fd);
+    virtual int Init(int epoll_fd, const char* server);
     virtual void Stop();
 
-    void Prepoll(int epoll_fd);
+    long Prepoll(int epoll_fd);
     virtual void Poll(const epoll_event& event);
 
-    void set_boolean(int datapoint, int value);
-    void set_value(int datapoint, int value);
+    void set_value(int datapoint, int value, bool boolean);
+
+protected:
+
+    void TrySendMore();
 
 private:
 
@@ -43,6 +55,8 @@ private:
 				 mci_battery_status battery);
 
     mosquitto* mosq;
+
+    datapoint_change* change_buffer;
 };
 
 #endif
