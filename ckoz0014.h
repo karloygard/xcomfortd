@@ -31,7 +31,12 @@ enum mci_tx_event
     REQUEST_STATUS      = 0x0b, // Requests MSG_STATUS event from the datapoint
     SET_PERCENT         = 0x0c,
     DIM_STOP_OR_SET     = 0x0d,
-    DIM_START_BOOL      = 0x0e, // value indicates direction
+    START_BOOL          = 0x0e, /* For dimmer, boolean value indicates direction.
+                                   For shutter, 00 = move down
+                                                01 = move up
+                                                10 = step down
+                                                11 = step up
+                                                02 = stop */
     SET_SSHORT_1COMMA   = 0x11,
     SET_TIME            = 0x2a,
     SET_DATE            = 0x2b,
