@@ -275,29 +275,32 @@ USB::Send(const char* buffer, size_t length)
 void
 USB::Stop()
 {
-    if (recv_transfer)
-	if (!libusb_cancel_transfer(recv_transfer))
-	    while (recv_transfer)
-		if (libusb_handle_events(NULL) < 0)
-		    break;
-    
-    if (send_transfer)
-	if (!libusb_cancel_transfer(send_transfer))
-	    while (send_transfer)
-		if (libusb_handle_events(NULL) < 0)
-		    break;
-
-    if (recv_transfer)
-	libusb_free_transfer(recv_transfer);
-
-    if (send_transfer)
-	libusb_free_transfer(send_transfer);
-
-    if (handle)
+    if (context)
     {
-	libusb_release_interface(handle, 0);
-	libusb_close(handle);
-    }
+	if (recv_transfer)
+	    if (!libusb_cancel_transfer(recv_transfer))
+		while (recv_transfer)
+		    if (libusb_handle_events(NULL) < 0)
+			break;
 
-    libusb_exit(NULL);
+	if (send_transfer)
+	    if (!libusb_cancel_transfer(send_transfer))
+		while (send_transfer)
+		    if (libusb_handle_events(NULL) < 0)
+			break;
+
+	if (recv_transfer)
+	    libusb_free_transfer(recv_transfer);
+
+	if (send_transfer)
+	    libusb_free_transfer(send_transfer);
+
+	if (handle)
+	{
+	    libusb_release_interface(handle, 0);
+	    libusb_close(handle);
+	}
+
+	libusb_exit(context);
+    }
 }    
