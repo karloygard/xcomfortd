@@ -54,9 +54,14 @@ private:
 				 int signal,
 				 mci_battery_status battery);
 
+    virtual void AckReceived(int success, int message_id);
+
     mosquitto* mosq;
 
     datapoint_change* change_buffer;
+
+    long last_message_timestamp;
+    int next_message_id;
 };
 
 #endif

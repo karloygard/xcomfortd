@@ -42,7 +42,9 @@ long getmseconds()
 
 MQTTGateway::MQTTGateway()
     : mosq(NULL),
-      change_buffer(NULL)
+      change_buffer(NULL),
+      last_message_timestamp(0),
+      next_message_id(0)
 {
 }
 
@@ -74,13 +76,13 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    char topic[128];
 	    char state[128];
 	    
-	    snprintf(topic, 128, "%d/get", datapoint);
+	    snprintf(topic, 128, "%d/get/dimmer", datapoint);
 	    snprintf(state, 128, "%d", value);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, strlen(state), (const uint8_t*) state, 1, true))
 		fprintf(stderr, "failed to publish message\n");
 	    
-	    snprintf(topic, 128, "%d/get_boolean", datapoint);
+	    snprintf(topic, 128, "%d/get/switch", datapoint);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
 		fprintf(stderr, "failed to publish message\n");
@@ -97,6 +99,12 @@ MQTTGateway::MessageReceived(mci_rx_event event,
     default:
 	break;
     }
+}
+
+void
+MQTTGateway::AckReceived(int success, int message_id)
+{
+    printf("received %s for message %d\n", success ? "ack" : "NAK", message_id);
 }
 
 void
@@ -137,50 +145,58 @@ MQTTGateway::TrySendMore()
     {
 	long current_time = getmseconds();
 
-	datapoint_change* dp = change_buffer;
-	datapoint_change* prev = NULL;
+        if (last_message_timestamp > current_time)
+        {
+	    return;
+        }
+        {
 
-	while (dp)
-	{
-	    if (dp->buffer_until <= current_time)
+	    datapoint_change* dp = change_buffer;
+	    datapoint_change* prev = NULL;
+
+	    while (dp)
 	    {
-		// Time to inspect
+	        if (dp->buffer_until <= current_time)
+	        {
+		    // Time to inspect
 
-		if (dp->value != -1)
-		{
-		    char buffer[9];
+		    if (dp->value != -1)
+		    {
+		        char buffer[9];
 
-		    if (dp->boolean)
-			xc_make_switch_msg(buffer, dp->datapoint, dp->value != 0);
+		        if (dp->boolean)
+			    xc_make_switch_msg(buffer, dp->datapoint, dp->value != 0, next_message_id++);
+		        else
+			    xc_make_setpercent_msg(buffer, dp->datapoint, dp->value, next_message_id++);
+		        Send(buffer, 9);
+                        last_message_timestamp = current_time + 300;
+
+		        dp->value = -1;
+		        dp->buffer_until = getmseconds() + 700;
+
+		        return;
+		    }
 		    else
-			xc_make_setpercent_msg(buffer, dp->datapoint, dp->value);
-		    Send(buffer, 9);
+		    {
+		        // Expired and not updated; delete entry
 
-		    dp->value = -1;
-		    dp->buffer_until = getmseconds() + 700;
+		        datapoint_change* tmp = dp->next;
 
-		    return;
-		}
-		else
-		{
-		    // Expired and not updated; delete entry
+		        delete dp;
 
-		    datapoint_change* tmp = dp->next;
+		        if (prev)
+			    dp = prev->next = tmp;
+		        else
+			    dp = change_buffer = tmp;
 
-		    delete dp;
+		        continue;
+		    }
+	        }
 
-		    if (prev)
-			dp = prev->next = tmp;
-		    else
-			dp = change_buffer = tmp;
-
-		    continue;
-		}
+	        prev = dp;
+	        dp = dp->next;
 	    }
-
-	    prev = dp;
-	    dp = dp->next;
-	}
+        }
     }
 }
 
@@ -198,7 +214,7 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
     bool boolean_msg = false;
     int value = 0;
     
-    mosquitto_topic_matches_sub("+/set_boolean", message->topic, &boolean_msg);
+    mosquitto_topic_matches_sub("+/set/switch", message->topic, &boolean_msg);
     
     int datapoint = strtol(message->topic, NULL, 10);
     
@@ -254,10 +270,10 @@ MQTTGateway::Init(int epoll_fd, const char* server)
     }
     else
     {
-	if (mosquitto_subscribe(mosq, NULL, "+/set", 1))
+	if (mosquitto_subscribe(mosq, NULL, "+/set/switch", 1))
 	    return false;
 	
-	if (mosquitto_subscribe(mosq, NULL, "+/set_boolean", 1))
+	if (mosquitto_subscribe(mosq, NULL, "+/set/dimmer", 1))
 	    return false;
     }
     
@@ -299,6 +315,9 @@ MQTTGateway::Prepoll(int epoll_fd)
 	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
 	    if (dp->value != -1 && timeout > dp->buffer_until)
 		timeout = dp->buffer_until;
+
+        if (timeout < last_message_timestamp)
+            timeout = last_message_timestamp;
 
 	if (timeout != LONG_MAX)
 	    timeout -= getmseconds();
@@ -354,6 +373,7 @@ main(int argc, char* argv[])
     if (argc != 2)
     {
 	fprintf(stderr, "Usage %s: [MQTT server]\n", argv[0]);
+	exit(0);
     }
 
     epoll_fd = epoll_create(10);

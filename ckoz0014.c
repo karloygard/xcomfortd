@@ -66,42 +66,71 @@ const char* xc_battery_status_name(enum mci_battery_status state)
     }
 }
 
-void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback, void* user_data)
+void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn ack, void* user_data)
 {
     struct xc_ci_message* msg = (struct xc_ci_message*) buffer;
 
-    if (size < 2)
-	return;
-
-    if (size < msg->message_size)
+    if (size < 2 ||
+        size < msg->message_size)
 	return;
 
     switch (msg->action)
     {
     case MCI_PT_RX:
-    {
-	callback(user_data,
-		 (enum mci_rx_event) msg->packet_rx.rx_event,
-		 msg->packet_rx.datapoint,
-		 (enum mci_rx_datatype) msg->packet_rx.rx_data_type,
-		 msg->packet_rx.value,
-		 msg->packet_rx.signal,
-		 (enum mci_battery_status) msg->packet_rx.battery);
+	recv(user_data,
+	     (enum mci_rx_event) msg->packet_rx.rx_event,
+	     msg->packet_rx.datapoint,
+	     (enum mci_rx_datatype) msg->packet_rx.rx_data_type,
+	     msg->packet_rx.value,
+	     msg->packet_rx.signal,
+	     (enum mci_battery_status) msg->packet_rx.battery);
 
 	break;
-    }
     
     case MCI_PT_ACK:
     {
         int i;
+	int message_id = (unsigned char) buffer[4];
 
 	printf("received MCI_PT_ACK(%d) [", msg->message_size);
 	
+        // The ACK format is largely unknown
+
+        switch (buffer[2])
+        {
+        case 0x1c:
+            printf("success ");
+            break;
+
+        default:
+            printf("fail ");
+
+            switch (buffer[3])
+            {
+            case 6:
+                printf("no response ");
+                break;
+
+            case 1:
+                printf("unknown command ");
+	        message_id = (unsigned char) buffer[5];
+                break;
+
+            case 0:
+                printf("unknown dp ");
+	        message_id = (unsigned char) buffer[5];
+                break;
+            }
+            break;
+        }
+
 	for (i = 2; i < msg->message_size; ++i)
 	    printf("%02hhx ", buffer[i]);
 	
 	printf("]\n");
 	
+	ack(user_data, buffer[2] == 0x1c, message_id);
+
 	break;
     }
 
@@ -111,7 +140,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback, v
     }
 }
 
-void xc_make_setpercent_msg(char* buffer, int datapoint, int value)
+void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id)
 {
     struct xc_ci_message* question = (struct xc_ci_message*) buffer;
 
@@ -120,10 +149,10 @@ void xc_make_setpercent_msg(char* buffer, int datapoint, int value)
     question->packet_tx.datapoint = datapoint;
     question->packet_tx.tx_event = DIM_STOP_OR_SET;
     question->packet_tx.value = (value << 8) + 0x40;
-    question->packet_tx.priority = 0;
+    question->packet_tx.message_id = message_id;
 }
 
-void xc_make_switch_msg(char* buffer, int datapoint, int on)
+void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
 {
     struct xc_ci_message* question = (struct xc_ci_message*) buffer;
 
@@ -132,6 +161,6 @@ void xc_make_switch_msg(char* buffer, int datapoint, int on)
     question->packet_tx.datapoint = datapoint;
     question->packet_tx.tx_event = SET_BOOLEAN;
     question->packet_tx.value = on;
-    question->packet_tx.priority = 0;
+    question->packet_tx.message_id = message_id;
 }
 

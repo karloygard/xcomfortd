@@ -43,7 +43,7 @@ USB::Received(struct libusb_transfer* transfer)
     }
     else
     {
-	xc_parse_packet((char*) transfer->buffer, transfer->length, message_received, this);
+	xc_parse_packet((char*) transfer->buffer, transfer->length, message_received, ack_received, this);
 
 	// Resubmit transfer
     
@@ -69,6 +69,16 @@ USB::message_received(void* user_data,
 				 value,
 				 signal,
 				 battery);
+}
+
+void
+USB::ack_received(void* user_data,
+		   int success,
+		   int message_id)
+{
+    USB* this_object = (USB*) user_data;
+
+    this_object->AckReceived(success, message_id);
 }
 
 void

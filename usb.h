@@ -42,12 +42,19 @@ private:
 				 int signal,
 				 mci_battery_status battery);
 
+    static void ack_received(void* user_data,
+			     int success,
+			     int message_id);
+
     virtual void MessageReceived(mci_rx_event event,
 				 int datapoint,
 				 mci_rx_datatype data_type,
 				 int value,
 				 int signal,
 				 mci_battery_status battery) {}
+
+    virtual void AckReceived(int success,
+			     int message_id) {}
 
     static void sent(struct libusb_transfer* transfer);
     static void received(struct libusb_transfer* transfer);

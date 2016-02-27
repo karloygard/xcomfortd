@@ -170,7 +170,7 @@ struct xc_ci_message
 	    unsigned char  datapoint;
 	    unsigned char  tx_event;
 	    int            value;
-	    unsigned char  priority;
+	    unsigned char  message_id;
 	}                  packet_tx;
 	struct
 	{
@@ -192,20 +192,24 @@ struct xc_ci_message
 
 #pragma pack(pop)
 
-typedef void (*xc_callback_fn)(void* user_data,
-			       enum mci_rx_event,
-			       int,
-			       enum mci_rx_datatype,
-			       int,
-			       int,
-			       enum mci_battery_status);
+typedef void (*xc_recv_fn)(void* user_data,
+			   enum mci_rx_event,
+			   int,
+			   enum mci_rx_datatype,
+			   int,
+			   int,
+			   enum mci_battery_status);
 
-void xc_parse_packet(const char* buffer, size_t size, xc_callback_fn callback, void* user_data);
+typedef void (*xc_ack_fn)(void* user_data,
+			  int success,
+			  int message_id);
+
+void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn ack, void* user_data);
 
 const char* xc_battery_status_name(enum mci_battery_status state);
 const char* xc_rxevent_name(enum mci_rx_event event);
 
-void xc_make_setpercent_msg(char* buffer, int datapoint, int value);
-void xc_make_switch_msg(char* buffer, int datapoint, int on);
+void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id);
+void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id);
 
 #endif
