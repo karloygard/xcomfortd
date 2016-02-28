@@ -94,7 +94,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
 
 	printf("received MCI_PT_ACK(%d) [", msg->message_size);
 	
-        // The ACK format is largely unknown
+        // The ACK parsing is mostly based on guesses
 
         switch (buffer[2])
         {
@@ -110,6 +110,12 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
             case 6:
                 printf("no response ");
                 break;
+
+            case 5:
+		// Possibly overflowing buffers
+		printf("unknown ");
+		message_id = -1;
+		break;
 
             case 1:
                 printf("unknown command ");
@@ -134,6 +140,10 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
 	break;
     }
 
+    case MCI_PT_FW:
+	printf("software version: %d.%02d\n", buffer[11], buffer[12]);
+	break;
+
     default:
 	printf("unprocessed: received %02x: %d\n", msg->action, msg->message_size);
 	break;
@@ -142,25 +152,41 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
 
 void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id)
 {
-    struct xc_ci_message* question = (struct xc_ci_message*) buffer;
+    struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
-    question->message_size = 0x9;
-    question->action = MCI_PT_TX;
-    question->packet_tx.datapoint = datapoint;
-    question->packet_tx.tx_event = DIM_STOP_OR_SET;
-    question->packet_tx.value = (value << 8) + 0x40;
-    question->packet_tx.message_id = message_id;
+    message->message_size = 0x9;
+    message->action = MCI_PT_TX;
+    message->packet_tx.datapoint = datapoint;
+    message->packet_tx.tx_event = DIM_STOP_OR_SET;
+    message->packet_tx.value = (value << 8) + 0x40;
+    message->packet_tx.message_id = message_id;
 }
 
 void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
 {
-    struct xc_ci_message* question = (struct xc_ci_message*) buffer;
+    struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
-    question->message_size = 0x9;
-    question->action = MCI_PT_TX;
-    question->packet_tx.datapoint = datapoint;
-    question->packet_tx.tx_event = SET_BOOLEAN;
-    question->packet_tx.value = on;
-    question->packet_tx.message_id = message_id;
+    message->message_size = 0x9;
+    message->action = MCI_PT_TX;
+    message->packet_tx.datapoint = datapoint;
+    message->packet_tx.tx_event = SET_BOOLEAN;
+    message->packet_tx.value = on;
+    message->packet_tx.message_id = message_id;
+}
+
+void xc_make_getswversion(char* buffer)
+{
+    struct xc_ci_message* message = (struct xc_ci_message*) buffer;
+
+    message->message_size = 0x9;
+    message->action = MCI_PT_FW;
+
+    buffer[2] = 0x10;
+    buffer[3] = 0x08;
+    buffer[4] = 0x0;
+    buffer[5] = 0x0;
+    buffer[6] = 0x00;
+    buffer[7] = 0x0a;
+    buffer[8] = 0x0;
 }
 

@@ -19,7 +19,8 @@ enum mci_pt_action
     MCI_PT_TX           = 0xB1,
     MCI_PT_UNKNOWN      = 0xB2, // Packet length 4, looks like some sort of ping
     MCI_PT_RX           = 0xC1,
-    MCI_PT_ACK          = 0xC3
+    MCI_PT_ACK          = 0xC3,
+    MCI_PT_FW           = 0xD1  // Messages relating to firmware
 };
 
 // Events that can be sent to datapoints.  Not all events are valid for all devices.
@@ -211,5 +212,6 @@ const char* xc_rxevent_name(enum mci_rx_event event);
 
 void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id);
 void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id);
+void xc_make_getswversion(char* buffer);
 
 #endif
