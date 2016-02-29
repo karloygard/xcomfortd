@@ -101,11 +101,7 @@ USB::Sent(struct libusb_transfer* transfer)
 	send_transfer = NULL;
     }
     else
-    {
 	message_in_transit = false;
-
-	TrySendMore();
-    }
 }
 
 void
@@ -242,6 +238,8 @@ USB::Init(int fd)
     err = libusb_submit_transfer(recv_transfer);
     if (err < 0)
 	return false;
+
+    xc_make_getswversion((char*) sendbuf);
     
     err = libusb_submit_transfer(send_transfer);
     if (err < 0)

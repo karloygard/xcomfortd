@@ -21,9 +21,6 @@
 
 #include "main.h"
 
-#define mqtt_host "192.168.1.1"
-#define mqtt_port 1883
-
 int do_exit = 0;
 
 static void
@@ -40,11 +37,12 @@ long getmseconds()
     return long(tp.tv_sec * 1000) + (tp.tv_nsec / 1000000);
 }
 
-MQTTGateway::MQTTGateway()
+MQTTGateway::MQTTGateway(bool debug)
     : mosq(NULL),
       change_buffer(NULL),
-      last_message_timestamp(0),
-      next_message_id(0)
+      next_message_id(0),
+      messages_in_transit(0),
+      debug(debug)
 {
 }
 
@@ -86,13 +84,6 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
 		fprintf(stderr, "failed to publish message\n");
-
-	    for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
-		if (dp->datapoint == datapoint)
-		{
-		    dp->buffer_until = 0;
-		    break;
-		}
 	}
 	break;
 
@@ -104,11 +95,34 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 void
 MQTTGateway::AckReceived(int success, int message_id)
 {
-    printf("received %s for message %d\n", success ? "ack" : "NAK", message_id);
+    if (--messages_in_transit < 0)
+	/* Messages can be acked after we have given up waiting for
+           them. */
+
+	messages_in_transit = 0;
+
+    if (message_id >= 0)
+    {
+	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
+	    if (dp->active_message_id == message_id)
+	    {
+		// We got an ack for this message; clear to send updates, if any
+
+		if (debug)
+		    fprintf(stderr, "%d acked after %d ms\n", message_id, int(getmseconds() - (dp->timeout - 5500)));
+
+		dp->active_message_id = -1;
+		dp->timeout = 0;
+
+		return;
+	    }
+
+	fprintf(stderr, "received spurious ack; message timeout is possibly too low\n");
+    }
 }
 
 void
-MQTTGateway::set_value(int datapoint, int value, bool boolean)
+MQTTGateway::SetDPValue(int datapoint, int value, bool boolean)
 {
     datapoint_change* dp = change_buffer;
 
@@ -117,9 +131,12 @@ MQTTGateway::set_value(int datapoint, int value, bool boolean)
 	    break;
 
     if (dp)
-	// This is already a known datapoint
+    {
+	// This is already a known datapoint; update values
 
-	dp->value = value;
+	dp->new_value = value;
+	dp->boolean = boolean;
+    }
     else
     {
 	dp = new datapoint_change;
@@ -129,73 +146,114 @@ MQTTGateway::set_value(int datapoint, int value, bool boolean)
 
 	dp->next = change_buffer;
 	dp->datapoint = datapoint;
-	dp->value = value;
+	dp->new_value = value;
+	dp->sent_value = -1;
 	dp->boolean = boolean;
-	dp->buffer_until = 0;
+
+	dp->active_message_id = -1;
+	dp->timeout = 0;
+
 	change_buffer = dp;
     }
-
-    TrySendMore();
 }
 
 void
 MQTTGateway::TrySendMore()
 {
+    if (messages_in_transit >= 1)
+	/* Number of messages we can run in parallel.
+	   
+           The stick appears to run into issues when handling multiple
+	   requests in parallel; it starts silently dropping messages
+	   or throwing unknown errors.  If you are adventurous, you
+	   can try bumping this for higher throughput when changing
+	   multiple datapoints; I saw issues with 4+ parallel
+	   requests. */
+	
+	return;
+
     if (CanSend())
     {
 	long current_time = getmseconds();
+	datapoint_change* dp = change_buffer;
+	datapoint_change* prev = NULL;
 
-        if (last_message_timestamp > current_time)
-        {
-	    return;
-        }
-        {
-
-	    datapoint_change* dp = change_buffer;
-	    datapoint_change* prev = NULL;
-
-	    while (dp)
+	while (dp)
+	{
+	    if (dp->timeout <= current_time)
 	    {
-	        if (dp->buffer_until <= current_time)
-	        {
-		    // Time to inspect
+		// Time to inspect
 
-		    if (dp->value != -1)
+		if (dp->active_message_id != -1 || dp->new_value != -1)
+		{
+		    // Unacked or unsent
+
+		    char buffer[9];
+		    bool retry = dp->active_message_id != -1;
+		    int value;
+
+		    if (retry)
 		    {
-		        char buffer[9];
+			// Was value updated in the meanwhile?
+			
+			if (dp->new_value != -1)
+			    value = dp->new_value;
+			else
+			    value = dp->sent_value;
 
-		        if (dp->boolean)
-			    xc_make_switch_msg(buffer, dp->datapoint, dp->value != 0, next_message_id++);
-		        else
-			    xc_make_setpercent_msg(buffer, dp->datapoint, dp->value, next_message_id++);
-		        Send(buffer, 9);
-                        last_message_timestamp = current_time + 300;
-
-		        dp->value = -1;
-		        dp->buffer_until = getmseconds() + 700;
-
-		        return;
+			if (debug)
+			    fprintf(stderr, "message %d was lost; retrying setting %d to %d (new id %d)\n", dp->active_message_id, dp->datapoint, value, next_message_id);
 		    }
 		    else
 		    {
-		        // Expired and not updated; delete entry
+			value = dp->new_value;
 
-		        datapoint_change* tmp = dp->next;
-
-		        delete dp;
-
-		        if (prev)
-			    dp = prev->next = tmp;
-		        else
-			    dp = change_buffer = tmp;
-
-		        continue;
+			if (debug)
+			    fprintf(stderr, "setting %d to %d (id %d)\n", dp->datapoint, value, next_message_id);
 		    }
-	        }
 
-	        prev = dp;
-	        dp = dp->next;
+		    dp->active_message_id = next_message_id;
+
+		    dp->sent_value = value;
+		    dp->new_value = -1;
+
+		    // This is how long we'll wait until we consider the message to be lost
+		    dp->timeout = current_time + 5500;
+
+		    if (dp->boolean)
+			xc_make_switch_msg(buffer, dp->datapoint, value != 0, next_message_id);
+		    else
+			xc_make_setpercent_msg(buffer, dp->datapoint, value, next_message_id);
+
+		    if (++next_message_id == 256)
+			next_message_id = 0;
+
+		    Send(buffer, 9);
+
+		    if (!retry)
+			messages_in_transit++;
+
+		    return;
+		}
+		else
+		{
+		    // Expired and not updated; delete entry
+
+		    datapoint_change* tmp = dp->next;
+
+		    delete dp;
+
+		    if (prev)
+			dp = prev->next = tmp;
+		    else
+			dp = change_buffer = tmp;
+
+		    continue;
+		}
 	    }
+	    
+	    prev = dp;
+	    dp = dp->next;
         }
     }
 }
@@ -229,7 +287,7 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
         else
             value = false;
 
-	set_value(datapoint, value, true);
+	SetDPValue(datapoint, value, true);
     }
     else
     {
@@ -239,7 +297,7 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
 	    errno == ERANGE)
 	    return;
 
-	set_value(datapoint, value, false);
+	SetDPValue(datapoint, value, false);
     }
 }
 
@@ -312,19 +370,15 @@ MQTTGateway::Prepoll(int epoll_fd)
     {
 	TrySendMore();
 
-	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
-	    if (dp->value != -1 && timeout > dp->buffer_until)
-		timeout = dp->buffer_until;
+	// Find lowest timeout
 
-        if (timeout < last_message_timestamp)
-            timeout = last_message_timestamp;
+	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
+	    if (dp->new_value != -1 && timeout > dp->timeout)
+		timeout = dp->timeout;
 
 	if (timeout != LONG_MAX)
 	    timeout -= getmseconds();
     }
-
-    if (timeout > 500)
-	timeout = 500;
 
     // Mosquitto isn't making this easy
 
@@ -342,6 +396,11 @@ MQTTGateway::Prepoll(int epoll_fd)
     // Should be called "fairly frequently"
 
     mosquitto_loop_misc(mosq);
+
+    if (timeout > 500)
+	// 500ms minimum timeout, for the above call
+
+	timeout = 500;
 
     return timeout;
 }
@@ -368,7 +427,7 @@ main(int argc, char* argv[])
     struct sigaction sigact;
     int err;
     int epoll_fd = -1;
-    MQTTGateway gateway;
+    MQTTGateway gateway(false);
 
     if (argc != 2)
     {

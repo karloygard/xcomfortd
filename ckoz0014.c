@@ -141,7 +141,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
     }
 
     case MCI_PT_FW:
-	printf("software version: %d.%02d\n", buffer[11], buffer[12]);
+	printf("Firmware version: %d.%02d\n", buffer[11], buffer[12]);
 	break;
 
     default:

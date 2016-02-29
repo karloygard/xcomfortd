@@ -14,10 +14,19 @@
 struct datapoint_change
 {
     datapoint_change* next;
+
     int datapoint;
-    int value;
+
+    int new_value;
+    int sent_value;
+
     int boolean;
-    long buffer_until;
+
+    // non zero when we're waiting for an ack
+    long timeout;
+
+    // The id we're waiting for an ack for
+    int active_message_id;
 };
 
 class MQTTGateway
@@ -25,7 +34,7 @@ class MQTTGateway
 {
 public:
 
-    MQTTGateway();
+    MQTTGateway(bool debug);
 
     virtual int Init(int epoll_fd, const char* server);
     virtual void Stop();
@@ -33,13 +42,11 @@ public:
     long Prepoll(int epoll_fd);
     virtual void Poll(const epoll_event& event);
 
-    void set_value(int datapoint, int value, bool boolean);
-
-protected:
-
-    void TrySendMore();
+    void SetDPValue(int datapoint, int value, bool boolean);
 
 private:
+
+    void TrySendMore();
 
     static void mqtt_message(mosquitto* mosq,
 			     void* obj,
@@ -56,12 +63,27 @@ private:
 
     virtual void AckReceived(int success, int message_id);
 
+    // Mosquitto instance
+
     mosquitto* mosq;
+
+    /* Linked list that keeps track of requested datapoint changes.
+       This buffers requests, in order to prevent overloading the
+       stick. */
 
     datapoint_change* change_buffer;
 
-    long last_message_timestamp;
+    // Next message id (0 to 255 looping)
+
     int next_message_id;
+
+    // Messages in transit
+
+    int messages_in_transit;
+
+    // Debug logging
+
+    bool debug;
 };
 
 #endif

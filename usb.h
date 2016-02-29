@@ -14,6 +14,8 @@
 #define INTR_LENGTH		19
 #define INTR_SEND_LENGTH	32
 
+// This class implements the USB communication layer with the stick.
+
 class USB
 {
 public:
@@ -27,10 +29,6 @@ public:
 
     bool CanSend() const { return !message_in_transit; }
     int Send(const char* buffer, size_t length);
-
-protected:
-
-    virtual void TrySendMore() {}
 
 private:
 
