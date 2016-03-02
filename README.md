@@ -1,6 +1,23 @@
-This code implements communication with the Eaton CKOZ-00/14
+xComfort gateway
+================
+
+This code implements communication with the Eaton xComfort CKOZ-00/14
 Communication stick (CI stick).  The CI stick needs to be added into
 the network with CKOZ-00/13.
+
+This code has been tested with and recognizes at least the following
+messages:
+
+ * MSG_ON
+ * MSG_OFF
+ * MSG_UP_PRESSED
+ * MSG_UP_RELEASED
+ * MSG_DOWN_PRESSED
+ * MSG_DOWN_RELEASED
+ * MSG_STATUS
+
+Furthermore, it can send on/off/dim% messages to devices.  Messages
+for controlling eg. shutters is outlined, but untested.
 
 The code has been written without any kind of documentation from
 Eaton, and may not follow their specifications.
@@ -41,3 +58,7 @@ Downgrading to "RF V1.08 - USB V1.04" resolved the issue._
 
 This code was reverse engineered from a variety of sources, plus some
 initial inspiration from <https://github.com/mifi/libxcomfort>.
+
+Copyright 2016 Karl Anders Øygard. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
