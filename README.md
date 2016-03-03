@@ -5,6 +5,11 @@ This code implements communication with the Eaton xComfort CKOZ-00/14
 Communication stick (CI stick).  The CI stick needs to be added into
 the network with CKOZ-00/13.
 
+xComfort is a wireless European home automation system, using the
+868,3MHz band.  The system is regrettably closed source.  This code
+was reverse engineered from a variety of sources, plus some initial
+inspiration from <https://github.com/mifi/libxcomfort>.
+
 This code has been tested with and recognizes at least the following
 messages:
 
@@ -29,8 +34,11 @@ However, the devices appear to ignore messages they don't understand.
 MRF can export a datapoint to device map, but I have not added support
 for that, as the benefits were limited.
 
-A simple application for forwarding events to and from an MQTT server
-is provided.  The application subscribes to the topics:
+A simple application for forwarding events to and from an MQTT server is
+provided.  This can be used eg. to interface an xComfort installation with
+[homebridge-mqttswitch](https://github.com/ilcato/homebridge-mqttswitch)
+or [IFTTT](https://ifttt.com/), with a little imagination.  The
+application subscribes to the topics:
 
     "+/set/dimmer" (accepts values from 0-100)
     "+/set/switch" (accepts true or false)
@@ -56,8 +64,6 @@ firmware, status reports from dimmers stopped working.  This was not
 only an issue with this code, but with other applications as well.
 Downgrading to "RF V1.08 - USB V1.04" resolved the issue._
 
-This code was reverse engineered from a variety of sources, plus some
-initial inspiration from <https://github.com/mifi/libxcomfort>.
 
 Copyright 2016 Karl Anders Øygard. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
