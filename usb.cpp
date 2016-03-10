@@ -239,7 +239,7 @@ USB::Init(int fd)
     if (err < 0)
 	return false;
 
-    xc_make_getswversion((char*) sendbuf);
+    xc_make_mgmt_msg((char*) sendbuf, CK_RELNO, 0);
     
     err = libusb_submit_transfer(send_transfer);
     if (err < 0)

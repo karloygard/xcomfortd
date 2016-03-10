@@ -10,6 +10,7 @@
  */
 
 #include <stdio.h>
+#include <arpa/inet.h>
 
 #include "ckoz0014.h"
 
@@ -90,51 +91,74 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
     case MCI_PT_ACK:
     {
         int i;
-	int message_id = (unsigned char) buffer[4];
+	int message_id = -1;
 
-	printf("received MCI_PT_ACK(%d) [", msg->message_size);
-	
-        // The ACK parsing is mostly based on guesses
+        // The ACK parsing isn't completely understood
 
         switch (buffer[2])
         {
-        case 0x1c:
-            printf("success ");
-            break;
+        case CK_SERIAL:
+            printf("serial number: %08x\n", ntohl(msg->packet_ack.data));
+            return;
+
+        case CK_RELNO:
+            printf("CKOZ-00/14 version numbers: RFV%d.%02d, USBV%d.%02d\n", buffer[4], buffer[5], buffer[6], buffer[7]);
+            return;
+
+        case CK_COUNTER_RX:
+            printf("counter rx: %08x\n", msg->packet_ack.data);
+            return;
+
+        case CK_COUNTER_TX:
+            printf("counter tx: %08x\n", msg->packet_ack.data);
+            return;
+
+        case CK_TIMEACCOUNT:
+            printf("time account: %d%%\n", buffer[4]);
+            return;
 
         default:
-            printf("fail ");
+	    printf("received MCI_PT_ACK(%d) [", msg->message_size);
+
+	    for (i = 2; i < msg->message_size; ++i)
+	        printf("%02hhx ", buffer[i]);
+
+	    printf("]\n");
+            return;
+
+        case CK_SUCCESS:
+	    message_id = (unsigned char) buffer[4];
+            break;
+
+        case CK_ERROR:
+            printf("error message: ");
 
             switch (buffer[3])
             {
             case 6:
+		message_id = (unsigned char) buffer[4];
                 printf("no response ");
                 break;
 
+	    default:
             case 5:
 		// Possibly overflowing buffers
-		printf("unknown ");
-		message_id = -1;
+		printf("unknown\n");
 		break;
 
             case 1:
-                printf("unknown command ");
+                printf("unknown command\n");
 	        message_id = (unsigned char) buffer[5];
                 break;
 
             case 0:
-                printf("unknown dp ");
+                printf("unknown dp\n");
 	        message_id = (unsigned char) buffer[5];
                 break;
             }
             break;
         }
 
-	for (i = 2; i < msg->message_size; ++i)
-	    printf("%02hhx ", buffer[i]);
-	
-	printf("]\n");
-	
 	ack(user_data, buffer[2] == 0x1c, message_id);
 
 	break;
@@ -174,19 +198,13 @@ void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
     message->packet_tx.message_id = message_id;
 }
 
-void xc_make_getswversion(char* buffer)
+void xc_make_mgmt_msg(char* buffer, int type, int mode)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
-    message->message_size = 0x9;
-    message->action = MCI_PT_FW;
-
-    buffer[2] = 0x10;
-    buffer[3] = 0x08;
-    buffer[4] = 0x0;
-    buffer[5] = 0x0;
-    buffer[6] = 0x00;
-    buffer[7] = 0x0a;
-    buffer[8] = 0x0;
+    message->message_size = 0x4;
+    message->action = MCI_PT_MGMT;
+    message->packet_mgmt.type = type;
+    message->packet_mgmt.mode = mode;
 }
 
