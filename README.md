@@ -59,11 +59,9 @@ changes.  Status reports are not routed in the xComfort network, so if
 your CI stick is not able to reach all devices, these status messages
 will be lost.
 
-_WARNING: When I upgraded the CI stick to the "RF V2.08 - USB V2.05"
-firmware, status reports from dimmers stopped working.  This was not
-only an issue with this code, but with other applications as well.
-Downgrading to "RF V1.08 - USB V1.04" resolved the issue._
-
+_WARNING: The firmware "RF V2.08 - USB V2.05" is buggy and will read
+status reports from dimmers incorrectly as always off.  This is
+resolved in the later "RF V2.10 - USB V2.05" firmware._
 
 Copyright 2016 Karl Anders Øygard. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
