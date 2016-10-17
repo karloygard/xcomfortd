@@ -24,6 +24,16 @@ messages:
 Furthermore, it can send on/off/dim% messages to devices.  Messages
 for controlling eg. shutters is outlined, but untested.
 
+xComfort status messages are not routed and have no delivery
+guarantees.  When status messages are lost, lights may for instance be
+switched on and off, and you will never know.  Careful placement of
+the USB stick is important, so that it can see these messages,
+however, in my case, some messages are still lost.  Polling devices in
+a round robin fashion might provide a somewhat clumsy workaround for
+this, but that's presently not implemented.  Newer xComfort devices
+support "extended status messages" that are routed, but I have no such
+devices and don't know if they work with this software.
+
 The code has been written without any kind of documentation from
 Eaton, and may not follow their specifications.
 
@@ -37,8 +47,8 @@ for that, as the benefits were limited.
 A simple application for forwarding events to and from an MQTT server is
 provided.  This can be used eg. to interface an xComfort installation with
 [homebridge-mqttswitch](https://github.com/ilcato/homebridge-mqttswitch)
-or [IFTTT](https://ifttt.com/), with a little imagination.  The
-application subscribes to the topics:
+or [Home Assistant](https://home-assistant.io/), with a little imagination.
+The application subscribes to the topics:
 
     "+/set/dimmer" (accepts values from 0-100)
     "+/set/switch" (accepts true or false)
