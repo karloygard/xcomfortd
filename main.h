@@ -10,6 +10,17 @@
 #define _MQTT_GATEWAY_H_
 
 #include "usb.h"
+#include <map>
+#include <string>
+
+enum mqtt_topics
+{
+    MQTT_TOPIC_SWITCH, MQTT_TOPIC_DIMMER, MQTT_TOPIC_STATUS, MQTT_DEBUG
+};
+
+std::map<std::string, mqtt_topics> mqtt_topic_type = { { "switch",
+        MQTT_TOPIC_SWITCH }, { "dimmer", MQTT_TOPIC_DIMMER }, { "status",
+        MQTT_TOPIC_STATUS }, { "debug", MQTT_DEBUG } };
 
 struct datapoint_change
 {
@@ -47,6 +58,10 @@ public:
 private:
 
     void TrySendMore();
+
+    static void mqtt_connect(mosquitto* mosq,
+    			 void* obj,
+				 int rc);
 
     static void mqtt_message(mosquitto* mosq,
 			     void* obj,

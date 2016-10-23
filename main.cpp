@@ -258,6 +258,14 @@ MQTTGateway::TrySendMore()
     }
 }
 
+void MQTTGateway::mqtt_connect(mosquitto* mosq, void* obj, int rc)
+{
+    printf("MQTT, Connected (%d)\n", rc);
+    //syslog(LOG_INFO, "MQTT, Connected (%d)\n", rc);
+
+    mosquitto_subscribe(mosq, NULL, "xcomfort/+/set/+", 0);
+}
+
 void
 MQTTGateway::mqtt_message(mosquitto* mosq, void* obj, const struct mosquitto_message* message)
 {
@@ -269,36 +277,50 @@ MQTTGateway::mqtt_message(mosquitto* mosq, void* obj, const struct mosquitto_mes
 void
 MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
 {
-    bool boolean_msg = false;
     int value = 0;
-    
-    mosquitto_topic_matches_sub("+/set/switch", message->topic, &boolean_msg);
-    
-    int datapoint = strtol(message->topic, NULL, 10);
-    
-    if (errno == EINVAL ||
-	errno == ERANGE)
-	return;
-    
-    if (boolean_msg)
+    char **topics;
+    int topic_count;
+
+    mosquitto_sub_topic_tokenise(message->topic, &topics, &topic_count);
+
+    int datapoint = strtol(topics[1], NULL, 10);
+
+    if (errno == EINVAL || errno == ERANGE)
+        return;
+
+    switch (mqtt_topic_type[topics[3]])
     {
+    case MQTT_TOPIC_SWITCH:
         if (strcmp((char*) message->payload, "true") == 0)
             value = true;
         else
             value = false;
 
-	SetDPValue(datapoint, value, true);
-    }
-    else
-    {
+        SetDPValue(datapoint, value, SET_BOOLEAN);
+        break;
+    case MQTT_TOPIC_DIMMER:
         value = strtol((char*) message->payload, NULL, 10);
-	    
-        if (errno == EINVAL ||
-	    errno == ERANGE)
-	    return;
 
-	SetDPValue(datapoint, value, false);
+        if (errno == EINVAL || errno == ERANGE)
+            return;
+
+        SetDPValue(datapoint, value, DIM_STOP_OR_SET);
+        break;
+    case MQTT_TOPIC_STATUS:
+        SetDPValue(datapoint, 0, REQUEST_STATUS);
+        break;
+    case MQTT_DEBUG:
+        if (datapoint == 0)
+        {
+            if (strcmp((char*) message->payload, "true") == 0)
+                debug = true;
+            else
+                debug = false;
+        }
+        break;
     }
+
+    mosquitto_sub_topic_tokens_free(&topics, topic_count);
 }
 
 int
@@ -319,20 +341,14 @@ MQTTGateway::Init(int epoll_fd, const char* server)
 
     mosquitto_message_callback_set(mosq, mqtt_message);
 
+    mosquitto_connect_callback_set(mosq, mqtt_connect);
+
     err = mosquitto_connect(mosq, server, 1883, 60);
 
     if (err)
     {
 	printf("failed to connect to MQTT server: %d\n", err);
 	return false;
-    }
-    else
-    {
-	if (mosquitto_subscribe(mosq, NULL, "+/set/switch", 1))
-	    return false;
-	
-	if (mosquitto_subscribe(mosq, NULL, "+/set/dimmer", 1))
-	    return false;
     }
     
     mosquitto_event.events = EPOLLIN;
