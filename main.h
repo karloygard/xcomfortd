@@ -63,6 +63,12 @@ private:
     			 void* obj,
 				 int rc);
 
+    static void mqtt_disconnect(mosquitto* mosq,
+    			 void* obj,
+				 int rc);
+
+    void MQTTReconnect();
+
     static void mqtt_message(mosquitto* mosq,
 			     void* obj,
 			     const struct mosquitto_message* message);
@@ -77,6 +83,9 @@ private:
 				 mci_battery_status battery);
 
     virtual void AckReceived(int success, int message_id);
+
+    int epoll_fd;
+    epoll_event mosquitto_event;
 
     // Mosquitto instance
 

@@ -266,6 +266,49 @@ void MQTTGateway::mqtt_connect(mosquitto* mosq, void* obj, int rc)
     mosquitto_subscribe(mosq, NULL, "xcomfort/+/set/+", 0);
 }
 
+void MQTTGateway::mqtt_disconnect(mosquitto* mosq, void* obj, int rc)
+{
+    printf("MQTT, Disconnect (%d)\n", rc);
+    //syslog(LOG_INFO, "MQTT, Disconnect (%d)\n", rc);
+
+    if (rc)
+    {
+        sleep(1);
+        MQTTGateway* this_object = (MQTTGateway*) obj;
+        this_object->MQTTReconnect();
+    }
+}
+
+void MQTTGateway::MQTTReconnect()
+{
+    int rc = 0;
+
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, mosquitto_socket(mosq),
+    NULL) < 0)
+    {
+        fprintf(stderr, "epoll_ctl del failed %s\n", strerror(errno));
+        //syslog(LOG_ERR, "epoll_ctl del failed %s\n", strerror(errno));
+    }
+
+    rc = mosquitto_reconnect(mosq);
+    if (rc)
+    {
+        printf("MQTT, Reconnecting failed (%d), %s\n", rc,
+                mosquitto_connack_string(rc));
+        //syslog(LOG_ERR, "MQTT, Reconnecting failed (%d), %s\n", rc,
+        //        mosquitto_connack_string(rc));
+    }
+    else
+    {
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, mosquitto_socket(mosq),
+                &mosquitto_event) < 0)
+        {
+            fprintf(stderr, "epoll_ctl add failed %s\n", strerror(errno));
+            //syslog(LOG_ERR, "epoll_ctl add failed %s\n", strerror(errno));
+        }
+    }
+}
+
 void
 MQTTGateway::mqtt_message(mosquitto* mosq, void* obj, const struct mosquitto_message* message)
 {
@@ -324,9 +367,10 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
 }
 
 int
-MQTTGateway::Init(int epoll_fd, const char* server)
+MQTTGateway::Init(int fd, const char* server)
 {
-    epoll_event mosquitto_event;
+    epoll_fd = fd;
+
     char clientid[24];
     int err = 0;
     
@@ -340,6 +384,8 @@ MQTTGateway::Init(int epoll_fd, const char* server)
 	return false;
 
     mosquitto_message_callback_set(mosq, mqtt_message);
+
+    mosquitto_disconnect_callback_set(mosq, mqtt_disconnect);
 
     mosquitto_connect_callback_set(mosq, mqtt_connect);
 
