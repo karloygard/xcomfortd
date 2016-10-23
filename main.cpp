@@ -127,7 +127,7 @@ MQTTGateway::AckReceived(int success, int message_id)
 }
 
 void
-MQTTGateway::SetDPValue(int datapoint, int value, bool boolean)
+MQTTGateway::SetDPValue(int datapoint, int value, mci_tx_event event)
 {
     datapoint_change* dp = change_buffer;
 
@@ -140,7 +140,7 @@ MQTTGateway::SetDPValue(int datapoint, int value, bool boolean)
 	// This is already a known datapoint; update values
 
 	dp->new_value = value;
-	dp->boolean = boolean;
+    dp->event = event;
     }
     else
     {
@@ -153,7 +153,7 @@ MQTTGateway::SetDPValue(int datapoint, int value, bool boolean)
 	dp->datapoint = datapoint;
 	dp->new_value = value;
 	dp->sent_value = -1;
-	dp->boolean = boolean;
+    dp->event = event;
 
     dp->sent_status_count = 2;
 
@@ -227,10 +227,23 @@ MQTTGateway::TrySendMore()
 		    // This is how long we'll wait until we consider the message to be lost
 		    dp->timeout = current_time + 5500;
 
-		    if (dp->boolean)
-			xc_make_switch_msg(buffer, dp->datapoint, value != 0, next_message_id);
-		    else
-			xc_make_setpercent_msg(buffer, dp->datapoint, value, next_message_id);
+            switch (dp->event)
+            {
+            case SET_BOOLEAN:
+                xc_make_switch_msg(buffer, dp->datapoint, value != 0,
+                        next_message_id);
+                break;
+            case DIM_STOP_OR_SET:
+                xc_make_setpercent_msg(buffer, dp->datapoint, value,
+                        next_message_id);
+                break;
+            case REQUEST_STATUS:
+                xc_make_requeststatus_msg(buffer, dp->datapoint,
+                        next_message_id);
+                break;
+            default:
+                fprintf(stderr, "Unsupported event\n");
+            }
 
 		    if (++next_message_id == 256)
 			next_message_id = 0;

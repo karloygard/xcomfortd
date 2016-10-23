@@ -236,6 +236,7 @@ const char* xc_rxevent_name(enum mci_rx_event event);
 
 void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id);
 void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id);
+void xc_make_requeststatus_msg (char* buffer, int datapoint, int message_id);
 void xc_make_mgmt_msg(char* buffer, int type, int mode);
 
 #endif

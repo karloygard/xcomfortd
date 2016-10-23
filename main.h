@@ -34,7 +34,7 @@ struct datapoint_change
     // max number of status requests
     int sent_status_count;
 
-    int boolean;
+    mci_tx_event event;
 
     // non zero when we're waiting for an ack
     long timeout;
@@ -56,7 +56,7 @@ public:
     long Prepoll(int epoll_fd);
     virtual void Poll(const epoll_event& event);
 
-    void SetDPValue(int datapoint, int value, bool boolean);
+    void SetDPValue(int datapoint, int value, mci_tx_event event);
 
 private:
 
