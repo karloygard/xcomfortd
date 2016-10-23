@@ -31,6 +31,9 @@ struct datapoint_change
     int new_value;
     int sent_value;
 
+    // max number of status requests
+    int sent_status_count;
+
     int boolean;
 
     // non zero when we're waiting for an ack

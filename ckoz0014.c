@@ -198,6 +198,17 @@ void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
     message->packet_tx.message_id = message_id;
 }
 
+void xc_make_requeststatus_msg (char* buffer, int datapoint, int message_id)
+{
+  struct xc_ci_message* message = (struct xc_ci_message*) buffer;
+
+  message->message_size = 0x9;
+  message->action = MCI_PT_TX;
+  message->packet_tx.datapoint = datapoint;
+  message->packet_tx.tx_event = REQUEST_STATUS;
+  message->packet_tx.message_id = message_id;
+}
+
 void xc_make_mgmt_msg(char* buffer, int type, int mode)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;

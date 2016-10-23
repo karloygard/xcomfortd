@@ -83,7 +83,12 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    snprintf(topic, 128, "%d/get/switch", datapoint);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
-		fprintf(stderr, "failed to publish message\n");
+		    fprintf(stderr, "failed to publish message\n");
+        else
+            for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
+                if (dp->datapoint == datapoint)
+                    dp->sent_status_count = 0;
+
 	}
 	break;
 
@@ -112,7 +117,7 @@ MQTTGateway::AckReceived(int success, int message_id)
 		    fprintf(stderr, "%d acked after %d ms\n", message_id, int(getmseconds() - (dp->timeout - 5500)));
 
 		dp->active_message_id = -1;
-		dp->timeout = 0;
+        dp->timeout = getmseconds() + 500; // Give time to get status
 
 		return;
 	    }
@@ -149,6 +154,8 @@ MQTTGateway::SetDPValue(int datapoint, int value, bool boolean)
 	dp->new_value = value;
 	dp->sent_value = -1;
 	dp->boolean = boolean;
+
+    dp->sent_status_count = 2;
 
 	dp->active_message_id = -1;
 	dp->timeout = 0;
@@ -235,6 +242,17 @@ MQTTGateway::TrySendMore()
 
 		    return;
 		}
+        else if (dp->sent_status_count)
+        {
+
+            // Did get a status update or should we force one
+            if (debug)
+                printf("datapoint %d continue send status count %d\n",
+                        dp->datapoint, dp->sent_status_count);
+            dp->sent_status_count--;
+            SetDPValue(dp->datapoint, dp->sent_value, REQUEST_STATUS);
+            continue;
+        }
 		else
 		{
 		    // Expired and not updated; delete entry
