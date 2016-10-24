@@ -77,13 +77,13 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    char topic[128];
 	    char state[128];
 	    
-	    snprintf(topic, 128, "%d/get/dimmer", datapoint);
+	    snprintf(topic, 128, "xcomfort/%d/get/dimmer", datapoint);
 	    snprintf(state, 128, "%d", value);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, strlen(state), (const uint8_t*) state, 1, true))
 	    	syslog(LOG_ERR, "failed to publish message\n");
 	    
-	    snprintf(topic, 128, "%d/get/switch", datapoint);
+	    snprintf(topic, 128, "xcomfort/%d/get/switch", datapoint);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
 	    	syslog(LOG_ERR, "failed to publish message\n");
@@ -517,43 +517,63 @@ main(int argc, char* argv[])
     char username[24];
 
 	for (int i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--debug")) {
+		if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--debug"))
 			debug = true;
-		} else if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "--nofork")) {
+		else if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "--nofork"))
 			daemon = false;
-		} else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--host")) {
-			if (i == argc - 1) {
+		else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--host"))
+		{
+			if (i == argc - 1)
+			{
 				printf("Error: -h argument given but no host specified\n");
 				exit(EXIT_FAILURE);
-			} else {
+			}
+			else
+			{
 				sprintf(hostname, "%s", argv[i + 1]);
 			}
 			i++;
-		} else if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--port")) {
-			if (i == argc - 1) {
+		}
+		else if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--port"))
+		{
+			if (i == argc - 1)
+			{
 				printf("Error: -p argument given but no port specified\n");
 				exit(EXIT_FAILURE);
-			} else {
+			}
+			else
+			{
 				port = atoi(argv[i + 1]);
 			}
 			i++;
-		} else if (!strcmp(argv[i], "-u") || !strcmp(argv[i], "--username")) {
-			if (i == argc - 1) {
+		}
+		else if (!strcmp(argv[i], "-u") || !strcmp(argv[i], "--username"))
+		{
+			if (i == argc - 1)
+			{
 				printf("Error: -u argument given but no port specified\n");
 				exit(EXIT_FAILURE);
-			} else {
+			} else
+			{
 				sprintf(username, "%s", argv[i + 1]);
 			}
 			i++;
-		} else if (!strcmp(argv[i], "-a") || !strcmp(argv[i], "--password")) {
-			if (i == argc - 1) {
+		}
+		else if (!strcmp(argv[i], "-a") || !strcmp(argv[i], "--password"))
+		{
+			if (i == argc - 1)
+			{
 				printf("Error: -a argument given but no port specified\n");
 				exit(EXIT_FAILURE);
-			} else {
+			}
+			else
+			{
 				sprintf(password, "%s", argv[i + 1]);
 			}
 			i++;
-		} else if (!strcmp(argv[i], "--help")) {
+		}
+		else if (!strcmp(argv[i], "--help"))
+		{
 			printf("\n\txComfort Gateway\n\n");
 			printf("Usage: %s [OPTION]\n\n", argv[0]);
 			printf("Options:\n");
@@ -570,7 +590,8 @@ main(int argc, char* argv[])
 
 	// Deamonize for startup script
 
-	if (daemon) {
+	if (daemon)
+	{
 		pid_t pid, sid;
 
 		pid = fork();
@@ -593,9 +614,9 @@ main(int argc, char* argv[])
 		close(STDIN_FILENO);
 		close(STDOUT_FILENO);
 		close(STDERR_FILENO);
-	} else {
-		openlog("xcomfortd", LOG_PERROR, LOG_USER);
 	}
+	else
+		openlog("xcomfortd", LOG_PERROR, LOG_USER);
 
     MQTTGateway gateway(debug);
 
