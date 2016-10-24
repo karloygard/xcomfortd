@@ -1,6 +1,6 @@
 LIBS = -lusb-1.0 -lmosquitto
-CFLAGS = -Wall -g
-CXXFLAGS = -Wall -g
+CFLAGS = -Wall -g -std=c++11
+CXXFLAGS = -Wall -g -std=c++11
 LDFLAGS = -g
 
 default: xcomfortd test

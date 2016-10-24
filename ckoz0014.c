@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <arpa/inet.h>
+#include <syslog.h>
 
 #include "ckoz0014.h"
 
@@ -102,7 +103,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
             return;
 
         case CK_RELNO:
-            printf("CKOZ-00/14 version numbers: RFV%d.%02d, USBV%d.%02d\n", buffer[4], buffer[5], buffer[6], buffer[7]);
+            syslog(LOG_INFO, "CKOZ-00/14 version numbers: RFV%d.%02d, USBV%d.%02d\n", buffer[4], buffer[5], buffer[6], buffer[7]);
             return;
 
         case CK_COUNTER_RX:

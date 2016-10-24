@@ -50,7 +50,7 @@ public:
 
     MQTTGateway(bool debug);
 
-    virtual int Init(int epoll_fd, const char* server);
+    virtual int Init(int epoll_fd, const char* server, int port, const char* username, const char* password);
     virtual void Stop();
 
     long Prepoll(int epoll_fd);

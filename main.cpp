@@ -18,6 +18,8 @@
 #include <libusb-1.0/libusb.h>
 #include <poll.h>
 #include <sys/epoll.h>
+#include <sys/stat.h>
+#include <syslog.h>
 
 #include "main.h"
 
@@ -57,7 +59,8 @@ MQTTGateway::MessageReceived(mci_rx_event event,
     const char* msg_name = xc_rxevent_name(event);
     const char* batt_name = xc_battery_status_name(battery);
     
-    printf("received MCI_PT_RX(%s): datapoint: %d value_type: %d value: %d (signal: %d) (battery: %s)\n",
+    if (debug)
+    syslog(LOG_INFO, "received MCI_PT_RX(%s): datapoint: %d value_type: %d value: %d (signal: %d) (battery: %s)\n",
 	   msg_name,
 	   datapoint,
 	   data_type,
@@ -78,12 +81,12 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    snprintf(state, 128, "%d", value);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, strlen(state), (const uint8_t*) state, 1, true))
-		fprintf(stderr, "failed to publish message\n");
+	    	syslog(LOG_ERR, "failed to publish message\n");
 	    
 	    snprintf(topic, 128, "%d/get/switch", datapoint);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
-		    fprintf(stderr, "failed to publish message\n");
+	    	syslog(LOG_ERR, "failed to publish message\n");
         else
             for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
                 if (dp->datapoint == datapoint)
@@ -114,7 +117,7 @@ MQTTGateway::AckReceived(int success, int message_id)
 		// We got an ack for this message; clear to send updates, if any
 
 		if (debug)
-		    fprintf(stderr, "%d acked after %d ms\n", message_id, int(getmseconds() - (dp->timeout - 5500)));
+			syslog(LOG_ERR, "%d acked after %d ms\n", message_id, int(getmseconds() - (dp->timeout - 5500)));
 
 		dp->active_message_id = -1;
         dp->timeout = getmseconds() + 500; // Give time to get status
@@ -122,7 +125,8 @@ MQTTGateway::AckReceived(int success, int message_id)
 		return;
 	    }
 
-	fprintf(stderr, "received spurious ack; message timeout is possibly too low\n");
+	if (debug)
+		syslog(LOG_INFO, "received spurious ack; message timeout is possibly too low\n");
     }
 }
 
@@ -209,14 +213,14 @@ MQTTGateway::TrySendMore()
 			    value = dp->sent_value;
 
 			if (debug)
-			    fprintf(stderr, "message %d was lost; retrying setting %d to %d (new id %d)\n", dp->active_message_id, dp->datapoint, value, next_message_id);
+				syslog(LOG_INFO, "message %d was lost; retrying setting %d to %d (new id %d)\n", dp->active_message_id, dp->datapoint, value, next_message_id);
 		    }
 		    else
 		    {
 			value = dp->new_value;
 
 			if (debug)
-			    fprintf(stderr, "setting %d to %d (id %d)\n", dp->datapoint, value, next_message_id);
+				syslog(LOG_INFO, "setting %d to %d (id %d)\n", dp->datapoint, value, next_message_id);
 		    }
 
 		    dp->active_message_id = next_message_id;
@@ -230,19 +234,16 @@ MQTTGateway::TrySendMore()
             switch (dp->event)
             {
             case SET_BOOLEAN:
-                xc_make_switch_msg(buffer, dp->datapoint, value != 0,
-                        next_message_id);
+                xc_make_switch_msg(buffer, dp->datapoint, value != 0, next_message_id);
                 break;
             case DIM_STOP_OR_SET:
-                xc_make_setpercent_msg(buffer, dp->datapoint, value,
-                        next_message_id);
+                xc_make_setpercent_msg(buffer, dp->datapoint, value, next_message_id);
                 break;
             case REQUEST_STATUS:
-                xc_make_requeststatus_msg(buffer, dp->datapoint,
-                        next_message_id);
+                xc_make_requeststatus_msg(buffer, dp->datapoint, next_message_id);
                 break;
             default:
-                fprintf(stderr, "Unsupported event\n");
+            	syslog(LOG_ERR, "Unsupported event\n");
             }
 
 		    if (++next_message_id == 256)
@@ -260,8 +261,7 @@ MQTTGateway::TrySendMore()
 
             // Did get a status update or should we force one
             if (debug)
-                printf("datapoint %d continue send status count %d\n",
-                        dp->datapoint, dp->sent_status_count);
+            	syslog(LOG_INFO, "datapoint %d continue send status count %d\n", dp->datapoint, dp->sent_status_count);
             dp->sent_status_count--;
             SetDPValue(dp->datapoint, dp->sent_value, REQUEST_STATUS);
             continue;
@@ -291,16 +291,14 @@ MQTTGateway::TrySendMore()
 
 void MQTTGateway::mqtt_connect(mosquitto* mosq, void* obj, int rc)
 {
-    printf("MQTT, Connected (%d)\n", rc);
-    //syslog(LOG_INFO, "MQTT, Connected (%d)\n", rc);
+    syslog(LOG_INFO, "MQTT, Connected (%d), %s\n", rc, mosquitto_connack_string(rc));
 
     mosquitto_subscribe(mosq, NULL, "xcomfort/+/set/+", 0);
 }
 
 void MQTTGateway::mqtt_disconnect(mosquitto* mosq, void* obj, int rc)
 {
-    printf("MQTT, Disconnect (%d)\n", rc);
-    //syslog(LOG_INFO, "MQTT, Disconnect (%d)\n", rc);
+    syslog(LOG_INFO, "MQTT, Disconnect (%d), %s\n", rc, mosquitto_connack_string(rc));
 
     if (rc)
     {
@@ -314,30 +312,15 @@ void MQTTGateway::MQTTReconnect()
 {
     int rc = 0;
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, mosquitto_socket(mosq),
-    NULL) < 0)
-    {
-        fprintf(stderr, "epoll_ctl del failed %s\n", strerror(errno));
-        //syslog(LOG_ERR, "epoll_ctl del failed %s\n", strerror(errno));
-    }
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, mosquitto_socket(mosq), NULL) < 0)
+        syslog(LOG_ERR, "epoll_ctl del failed %s\n", strerror(errno));
 
     rc = mosquitto_reconnect(mosq);
     if (rc)
-    {
-        printf("MQTT, Reconnecting failed (%d), %s\n", rc,
-                mosquitto_connack_string(rc));
-        //syslog(LOG_ERR, "MQTT, Reconnecting failed (%d), %s\n", rc,
-        //        mosquitto_connack_string(rc));
-    }
+        syslog(LOG_ERR, "MQTT, Reconnecting failed (%d), %s\n", rc, mosquitto_connack_string(rc));
     else
-    {
-        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, mosquitto_socket(mosq),
-                &mosquitto_event) < 0)
-        {
-            fprintf(stderr, "epoll_ctl add failed %s\n", strerror(errno));
-            //syslog(LOG_ERR, "epoll_ctl add failed %s\n", strerror(errno));
-        }
-    }
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, mosquitto_socket(mosq), &mosquitto_event) < 0)
+            syslog(LOG_ERR, "epoll_ctl add failed %s\n", strerror(errno));
 }
 
 void
@@ -398,7 +381,7 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
 }
 
 int
-MQTTGateway::Init(int fd, const char* server)
+MQTTGateway::Init(int fd, const char* server, int port, const char* username, const char* password)
 {
     epoll_fd = fd;
 
@@ -408,7 +391,7 @@ MQTTGateway::Init(int fd, const char* server)
     mosquitto_lib_init();
     
     memset(clientid, 0, 24);
-    snprintf(clientid, 23, "xcomfort_%d", getpid());
+    snprintf(clientid, 23, "xcomfort");
     mosq = mosquitto_new(clientid, 0, this);
     
     if (!mosq)
@@ -420,12 +403,15 @@ MQTTGateway::Init(int fd, const char* server)
 
     mosquitto_connect_callback_set(mosq, mqtt_connect);
 
-    err = mosquitto_connect(mosq, server, 1883, 60);
+    if (username && password)
+    	mosquitto_username_pw_set(mosq, username, password);
+
+    err = mosquitto_connect(mosq, server, port, 60);
 
     if (err)
     {
-	printf("failed to connect to MQTT server: %d\n", err);
-	return false;
+    	syslog(LOG_ERR, "failed to connect to MQTT server: %d\n", err);
+    	return false;
     }
     
     mosquitto_event.events = EPOLLIN;
@@ -433,8 +419,8 @@ MQTTGateway::Init(int fd, const char* server)
 
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, mosquitto_socket(mosq), &mosquitto_event) < 0)
     {
-        fprintf(stderr, "epoll_ctl failed %s\n", strerror(errno));
-	return false;
+    	syslog(LOG_ERR, "epoll_ctl failed %s\n", strerror(errno));
+        return false;
     }
 
     return USB::Init(epoll_fd);
@@ -446,7 +432,10 @@ MQTTGateway::Stop()
     USB::Stop();
 
     if (mosq)
-	mosquitto_destroy(mosq);
+    	mosquitto_disconnect(mosq);
+
+    if (mosq)
+    	mosquitto_destroy(mosq);
     
     mosquitto_lib_cleanup();
 }
@@ -517,20 +506,102 @@ MQTTGateway::Poll(const epoll_event& event)
 int
 main(int argc, char* argv[])
 {
-    struct sigaction sigact;
+	bool daemon = true;
+	bool debug = false;
     int err;
     int epoll_fd = -1;
-    MQTTGateway gateway(false);
+    char hostname[24] = "localhost";
+    struct sigaction sigact;
+    char password[24];
+    int port = 1883;
+    char username[24];
 
-    if (argc != 2)
-    {
-	fprintf(stderr, "Usage %s: [MQTT server]\n", argv[0]);
-	exit(0);
-    }
+	for (int i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--debug")) {
+			debug = true;
+		} else if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "--nofork")) {
+			daemon = false;
+		} else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--host")) {
+			if (i == argc - 1) {
+				printf("Error: -h argument given but no host specified\n");
+				exit(EXIT_FAILURE);
+			} else {
+				sprintf(hostname, "%s", argv[i + 1]);
+			}
+			i++;
+		} else if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--port")) {
+			if (i == argc - 1) {
+				printf("Error: -p argument given but no port specified\n");
+				exit(EXIT_FAILURE);
+			} else {
+				port = atoi(argv[i + 1]);
+			}
+			i++;
+		} else if (!strcmp(argv[i], "-u") || !strcmp(argv[i], "--username")) {
+			if (i == argc - 1) {
+				printf("Error: -u argument given but no port specified\n");
+				exit(EXIT_FAILURE);
+			} else {
+				sprintf(username, "%s", argv[i + 1]);
+			}
+			i++;
+		} else if (!strcmp(argv[i], "-a") || !strcmp(argv[i], "--password")) {
+			if (i == argc - 1) {
+				printf("Error: -a argument given but no port specified\n");
+				exit(EXIT_FAILURE);
+			} else {
+				sprintf(password, "%s", argv[i + 1]);
+			}
+			i++;
+		} else if (!strcmp(argv[i], "--help")) {
+			printf("\n\txComfort Gateway\n\n");
+			printf("Usage: %s [OPTION]\n\n", argv[0]);
+			printf("Options:\n");
+			printf("  -d, --debug\n");
+			printf("  -f, --nofork\n");
+			printf("  -h, --host\n");
+			printf("  -p, --port\n");
+			printf("  -u, --username\n");
+			printf("  -a, --password\n");
+			printf("\n");
+			exit(EXIT_SUCCESS);
+		}
+	}
+
+	// Deamonize for startup script
+
+	if (daemon) {
+		pid_t pid, sid;
+
+		pid = fork();
+		if (pid < 0)
+			exit(EXIT_FAILURE);
+		if (pid > 0)
+			exit(EXIT_SUCCESS);
+
+		umask(0);
+
+		openlog("xcomfortd", LOG_PID, LOG_DAEMON);
+
+		sid = setsid();
+		if (sid < 0)
+			exit(EXIT_FAILURE);
+
+		if ((chdir("/tmp/")) < 0)
+			exit(EXIT_FAILURE);
+
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		close(STDERR_FILENO);
+	} else {
+		openlog("xcomfortd", LOG_PERROR, LOG_USER);
+	}
+
+    MQTTGateway gateway(debug);
 
     epoll_fd = epoll_create(10);
     
-    if (!gateway.Init(epoll_fd, argv[1]))
+    if (!gateway.Init(epoll_fd, hostname, port, username, password))
 	goto out;
     
     sigact.sa_handler = sighandler;
@@ -565,4 +636,3 @@ out:
     
     return err >= 0 ? err : -err;
 }
-

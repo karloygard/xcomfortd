@@ -33,23 +33,24 @@ USB::received(struct libusb_transfer* transfer)
 void
 USB::Received(struct libusb_transfer* transfer)
 {
-    if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
-    {
-	fprintf(stderr, "irq transfer status %d, terminating\n", transfer->status);
-
-	do_exit = 2;
-	libusb_free_transfer(transfer);
-	recv_transfer = NULL;
-    }
-    else
-    {
+	// This doesnt work for me
+//    if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
+//    {
+//	fprintf(stderr, "irq transfer status %d, terminating\n", transfer->status);
+//
+//	do_exit = 2;
+//	libusb_free_transfer(transfer);
+//	recv_transfer = NULL;
+//    }
+//    else
+//    {
 	xc_parse_packet((char*) transfer->buffer, transfer->length, message_received, ack_received, this);
 
 	// Resubmit transfer
     
 	if (libusb_submit_transfer(recv_transfer) < 0)
 	    do_exit = 2;
-    }
+//    }
 }
 
 void
