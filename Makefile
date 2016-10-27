@@ -3,7 +3,7 @@ CFLAGS = -Wall -g -std=c++11
 CXXFLAGS = -Wall -g -std=c++11
 LDFLAGS = -g
 
-default: xcomfortd test
+default: xcomfortd # test
 
 %.o: %.c
 	$(CXX) $(CFLAGS) -c $< -o $@
