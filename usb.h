@@ -11,7 +11,7 @@
 
 #include "ckoz0014.h"
 
-#define INTR_LENGTH		19
+#define INTR_RECV_LENGTH	32
 #define INTR_SEND_LENGTH	32
 
 // This class implements the USB communication layer with the stick.
@@ -30,7 +30,18 @@ public:
     bool CanSend() const { return !message_in_transit; }
     int Send(const char* buffer, size_t length);
 
+protected:
+
+    virtual void Error(const char* fmt, ...) = 0;
+    virtual void Info(const char* fmt, ...) = 0;
+
 private:
+
+    static void relno(void* user_data,
+		      int rf_major,
+		      int rf_minor,
+		      int usb_major,
+		      int usb_minor);
 
     static void message_received(void* user_data,
 				 mci_rx_event event,
@@ -43,6 +54,11 @@ private:
     static void ack_received(void* user_data,
 			     int success,
 			     int message_id);
+
+    virtual void Relno(int rf_major,
+		       int rf_minor,
+		       int usb_major,
+		       int usb_minor) {}
 
     virtual void MessageReceived(mci_rx_event event,
 				 int datapoint,
@@ -72,10 +88,12 @@ private:
 
     int epoll_fd;
 
+    xc_parse_data data;
+
     libusb_context* context;
     libusb_device_handle* handle;
 
-    unsigned char recvbuf[INTR_LENGTH];
+    unsigned char recvbuf[INTR_RECV_LENGTH];
     libusb_transfer* recv_transfer;
 
     unsigned char sendbuf[INTR_SEND_LENGTH];

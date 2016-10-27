@@ -33,24 +33,35 @@ USB::received(struct libusb_transfer* transfer)
 void
 USB::Received(struct libusb_transfer* transfer)
 {
-	// This doesnt work for me
-//    if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
-//    {
-//	fprintf(stderr, "irq transfer status %d, terminating\n", transfer->status);
-//
-//	do_exit = 2;
-//	libusb_free_transfer(transfer);
-//	recv_transfer = NULL;
-//    }
-//    else
-//    {
-	xc_parse_packet((char*) transfer->buffer, transfer->length, message_received, ack_received, this);
+    if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
+    {
+	Error("irq transfer status %d, terminating\n", transfer->status);
+
+	do_exit = 2;
+	libusb_free_transfer(transfer);
+	recv_transfer = NULL;
+    }
+    else
+    {
+	xc_parse_packet((char*) transfer->buffer, transfer->length, &data);
 
 	// Resubmit transfer
     
 	if (libusb_submit_transfer(recv_transfer) < 0)
 	    do_exit = 2;
-//    }
+    }
+}
+
+void
+USB::relno(void* user_data,
+	   int rf_major,
+	   int rf_minor,
+	   int usb_major,
+	   int usb_minor)
+{
+    USB* this_object = (USB*) user_data;
+
+    this_object->Relno(rf_major, rf_minor, usb_major, usb_minor);
 }
 
 void
@@ -95,7 +106,7 @@ USB::Sent(struct libusb_transfer* transfer)
 {
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED)
     {
-	fprintf(stderr, "irq transfer status %d?\n", transfer->status);
+	Error("irq transfer status %d?\n", transfer->status);
 	
 	do_exit = 2;
 	libusb_free_transfer(transfer);
@@ -125,7 +136,7 @@ USB::FDAdded(int fd, short fd_events)
 	events.events |= EPOLLOUT;
 
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &events) < 0)
-        fprintf(stderr, "epoll_ctl failed %s\n", strerror(errno));
+        Error("epoll_ctl failed %s\n", strerror(errno));
 }
 
 void
@@ -140,7 +151,7 @@ void
 USB::FDRemoved(int fd)
 {
     if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL) < 0)
-        fprintf(stderr, "epoll_ctl failed %s\n", strerror(errno));
+        Error("epoll_ctl failed %s\n", strerror(errno));
 }
 
 bool
@@ -169,6 +180,10 @@ USB::USB()
       recv_transfer(NULL),
       send_transfer(NULL)
 {
+    data.recv = message_received;
+    data.ack = ack_received;
+    data.relno = relno;
+    data.user_data = this;
 }
 
 int
@@ -181,14 +196,14 @@ USB::Init(int fd)
     err = libusb_init(&context);
     if (err < 0)
     {
-	fprintf(stderr, "failed to initialise libusb\n");
+	Error("failed to initialise libusb\n");
 	exit(1);
     }
     
     handle = libusb_open_device_with_vid_pid(context, 0x188a, 0x1101);
     if (!handle)
     {
-	fprintf(stderr, "Could not find/open xComfort USB device\n");
+	Error("Could not find/open xComfort USB device\n");
 	return false;
     }
     
@@ -197,7 +212,7 @@ USB::Init(int fd)
 	err = libusb_detach_kernel_driver(handle, 0);
 	if (err < 0)
 	{
-	    fprintf(stderr, "usb_detach_kernel_driver %d\n", err);
+	    Error("usb_detach_kernel_driver %d\n", err);
 	    return false;
 	}
     }
@@ -205,21 +220,21 @@ USB::Init(int fd)
     err = libusb_set_configuration(handle, 1); 
     if (err < 0)
     { 
-	fprintf(stderr, "libusb_set_configuration error %d\n", err); 
+	Error("libusb_set_configuration error %d\n", err);
 	return false;
     } 
     
     err = libusb_claim_interface(handle, 0);
     if (err < 0)
     {
-	fprintf(stderr, "usb_claim_interface error %d\n", err);
+	Error("usb_claim_interface error %d\n", err);
 	return false;
     }
     
     recv_transfer = libusb_alloc_transfer(0);
     if (!recv_transfer)
     {
-	fprintf(stderr, "failed to allocate transfer %d\n", err);
+	Error("failed to allocate transfer %d\n", err);
 	return false;
     }
     
@@ -229,7 +244,7 @@ USB::Init(int fd)
     send_transfer = libusb_alloc_transfer(0);
     if (!send_transfer)
     {
-	fprintf(stderr, "failed to allocate transfer %d\n", err);
+	Error("failed to allocate transfer %d\n", err);
 	return false;
     }
     
@@ -272,7 +287,7 @@ USB::Send(const char* buffer, size_t length)
     err = libusb_submit_transfer(send_transfer);
     if (err < 0)
     {
-	fprintf(stderr, "failed to submit transfer\n");
+	Error("failed to submit transfer\n");
 	return -1;
     }
 

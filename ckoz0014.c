@@ -68,7 +68,7 @@ const char* xc_battery_status_name(enum mci_battery_status state)
     }
 }
 
-void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn ack, void* user_data)
+void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
 {
     struct xc_ci_message* msg = (struct xc_ci_message*) buffer;
 
@@ -79,13 +79,13 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
     switch (msg->action)
     {
     case MCI_PT_RX:
-	recv(user_data,
-	     (enum mci_rx_event) msg->packet_rx.rx_event,
-	     msg->packet_rx.datapoint,
-	     (enum mci_rx_datatype) msg->packet_rx.rx_data_type,
-	     msg->packet_rx.value,
-	     msg->packet_rx.signal,
-	     (enum mci_battery_status) msg->packet_rx.battery);
+	data->recv(data->user_data,
+		   (enum mci_rx_event) msg->packet_rx.rx_event,
+		   msg->packet_rx.datapoint,
+		   (enum mci_rx_datatype) msg->packet_rx.rx_data_type,
+		   msg->packet_rx.value,
+		   msg->packet_rx.signal,
+		   (enum mci_battery_status) msg->packet_rx.battery);
 
 	break;
     
@@ -103,7 +103,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
             return;
 
         case CK_RELNO:
-            syslog(LOG_INFO, "CKOZ-00/14 version numbers: RFV%d.%02d, USBV%d.%02d\n", buffer[4], buffer[5], buffer[6], buffer[7]);
+	    data->relno(data->user_data, buffer[4], buffer[5], buffer[6], buffer[7]);
             return;
 
         case CK_COUNTER_RX:
@@ -160,7 +160,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn
             break;
         }
 
-	ack(user_data, buffer[2] == 0x1c, message_id);
+	data->ack(data->user_data, buffer[2] == 0x1c, message_id);
 
 	break;
     }
@@ -201,13 +201,13 @@ void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
 
 void xc_make_requeststatus_msg (char* buffer, int datapoint, int message_id)
 {
-  struct xc_ci_message* message = (struct xc_ci_message*) buffer;
+    struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
-  message->message_size = 0x9;
-  message->action = MCI_PT_TX;
-  message->packet_tx.datapoint = datapoint;
-  message->packet_tx.tx_event = REQUEST_STATUS;
-  message->packet_tx.message_id = message_id;
+    message->message_size = 0x9;
+    message->action = MCI_PT_TX;
+    message->packet_tx.datapoint = datapoint;
+    message->packet_tx.tx_event = REQUEST_STATUS;
+    message->packet_tx.message_id = message_id;
 }
 
 void xc_make_mgmt_msg(char* buffer, int type, int mode)

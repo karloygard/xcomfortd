@@ -229,14 +229,27 @@ typedef void (*xc_ack_fn)(void* user_data,
 			  int success,
 			  int message_id);
 
-void xc_parse_packet(const char* buffer, size_t size, xc_recv_fn recv, xc_ack_fn ack, void* user_data);
+typedef void (*xc_relno_fn)(void* user_data,
+			    int rf_major,
+			    int rf_minor,
+			    int usb_major,
+			    int usb_minor);
+
+struct xc_parse_data {
+    xc_ack_fn ack;
+    xc_recv_fn recv;
+    xc_relno_fn relno;
+    void* user_data;
+};
+
+void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data);
 
 const char* xc_battery_status_name(enum mci_battery_status state);
 const char* xc_rxevent_name(enum mci_rx_event event);
 
 void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id);
 void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id);
-void xc_make_requeststatus_msg (char* buffer, int datapoint, int message_id);
+void xc_make_requeststatus_msg(char* buffer, int datapoint, int message_id);
 void xc_make_mgmt_msg(char* buffer, int type, int mode);
 
 #endif

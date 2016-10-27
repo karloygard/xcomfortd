@@ -15,24 +15,32 @@
 
 enum mqtt_topics
 {
-    MQTT_TOPIC_SWITCH, MQTT_TOPIC_DIMMER, MQTT_TOPIC_STATUS, MQTT_DEBUG
+    MQTT_TOPIC_SWITCH,
+    MQTT_TOPIC_DIMMER,
+    MQTT_TOPIC_STATUS,
+    MQTT_DEBUG
 };
 
-std::map<std::string, mqtt_topics> mqtt_topic_type = { { "switch",
-        MQTT_TOPIC_SWITCH }, { "dimmer", MQTT_TOPIC_DIMMER }, { "status",
-        MQTT_TOPIC_STATUS }, { "debug", MQTT_DEBUG } };
+std::map<std::string, mqtt_topics> mqtt_topic_type = {
+    { "switch", MQTT_TOPIC_SWITCH },
+    { "dimmer", MQTT_TOPIC_DIMMER },
+    { "status", MQTT_TOPIC_STATUS },
+    { "debug", MQTT_DEBUG }
+};
 
 struct datapoint_change
 {
+    // Linked list
     datapoint_change* next;
 
+    // Datapoint this relates to
     int datapoint;
 
     int new_value;
     int sent_value;
 
-    // max number of status requests
-    int sent_status_count;
+    // number of status requests sent
+    int sent_status_requests;
 
     mci_tx_event event;
 
@@ -48,9 +56,13 @@ class MQTTGateway
 {
 public:
 
-    MQTTGateway(bool debug);
+    MQTTGateway(bool verbose, bool use_syslog);
 
-    virtual int Init(int epoll_fd, const char* server, int port, const char* username, const char* password);
+    virtual int Init(int epoll_fd,
+		     const char* server,
+		     int port,
+		     const char* username,
+		     const char* password);
     virtual void Stop();
 
     long Prepoll(int epoll_fd);
@@ -58,25 +70,35 @@ public:
 
     void SetDPValue(int datapoint, int value, mci_tx_event event);
 
+protected:
+
+    virtual void Error(const char* fmt, ...);
+    virtual void Info(const char* fmt, ...);
+
 private:
 
     void TrySendMore();
 
-    static void mqtt_connect(mosquitto* mosq,
-    			 void* obj,
-				 int rc);
+    static void mqtt_connected(mosquitto* mosq,
+			       void* obj,
+			       int rc);
 
-    static void mqtt_disconnect(mosquitto* mosq,
-    			 void* obj,
-				 int rc);
-
-    void MQTTReconnect();
+    static void mqtt_disconnected(mosquitto* mosq,
+				  void* obj,
+				  int rc);
 
     static void mqtt_message(mosquitto* mosq,
 			     void* obj,
 			     const struct mosquitto_message* message);
 
+    void MQTTConnected(int rc);
+    void MQTTDisconnected(int rc);
     void MQTTMessage(const struct mosquitto_message* message);
+
+    virtual void Relno(int rf_major,
+		       int rf_minor,
+		       int usb_major,
+		       int usb_minor);
 
     virtual void MessageReceived(mci_rx_event event,
 				 int datapoint,
@@ -108,9 +130,13 @@ private:
 
     int messages_in_transit;
 
-    // Debug logging
+    // Verbose logging
 
-    bool debug;
+    bool verbose;
+
+    // Log to syslog
+
+    bool use_syslog;
 };
 
 #endif
