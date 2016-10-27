@@ -73,6 +73,6 @@ _WARNING: The firmware "RF V2.08 - USB V2.05" is buggy and will read
 status reports from dimmers incorrectly as always off.  This is
 resolved in the later "RF V2.10 - USB V2.05" firmware._
 
-Copyright 2016 Karl Anders Øygard. All rights reserved.
-Use of this source code is governed by a BSD-style license that can be
-found in the LICENSE file.
+Copyright 2016 Karl Anders Øygard. All rights reserved.  Use of this
+source code is governed by a BSD-style license that can be found in
+the LICENSE file.  Some code was contributed by Hans Karlinius.
