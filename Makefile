@@ -11,7 +11,7 @@ default: xcomfortd # test
 xcomfortd: ckoz0014.o usb.o main.o
 	$(CXX) $(LDFLAGS) $^ $(LIBS) -o $@
 
-test: ckoz0013.o lib_crc/lib_crc.o
+test: ckoz0013/ckoz0013.o ckoz0013/lib_crc.o
 	$(CXX) $(LDFLAGS) $^ $(LIBS) -o $@
 
 clean:
