@@ -68,6 +68,17 @@ const char* xc_battery_status_name(enum mci_battery_status state)
     }
 }
 
+const char* xc_shutter_status_name(int state)
+{
+    switch (state)
+    {
+    default:
+    case SHUTTER_STOPPED:    return "stopped";
+    case SHUTTER_UP:         return "up";
+    case SHUTTER_DOWN:       return "down";
+    }
+}
+
 void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
 {
     struct xc_ci_message* msg = (struct xc_ci_message*) buffer;
@@ -173,6 +184,18 @@ void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
 	printf("unprocessed: received %02x: %d\n", msg->action, msg->message_size);
 	break;
     }
+}
+
+void xc_make_setstartbool_msg(char* buffer, int datapoint, int cmd, int message_id)
+{
+    struct xc_ci_message* message = (struct xc_ci_message*) buffer;
+
+    message->message_size = 0x9;
+    message->action = MCI_PT_TX;
+    message->packet_tx.datapoint = datapoint;
+    message->packet_tx.tx_event = START_BOOL;
+    message->packet_tx.value = cmd;
+    message->packet_tx.message_id = message_id;
 }
 
 void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id)

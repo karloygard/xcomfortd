@@ -125,6 +125,15 @@ enum mci_battery_status
     POWERLINE           = 0x10
 };
 
+// Shutter status reported by datapoints
+
+enum mci_shutter_status
+{
+    SHUTTER_STOPPED     = 0x00,
+    SHUTTER_UP          = 0x01,
+    SHUTTER_DOWN        = 0x02
+};
+
 /* Data types that can be received from a datapoint
 
    These are events that are known by MRF, they may not all
@@ -244,9 +253,12 @@ struct xc_parse_data {
 
 void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data);
 
+const char* xc_shutter_status_name(int state);
+
 const char* xc_battery_status_name(enum mci_battery_status state);
 const char* xc_rxevent_name(enum mci_rx_event event);
 
+void xc_make_setstartbool_msg(char* buffer, int datapoint, int cmd, int message_id);
 void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id);
 void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id);
 void xc_make_requeststatus_msg(char* buffer, int datapoint, int message_id);

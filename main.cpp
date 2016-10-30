@@ -101,6 +101,11 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
 		Error("failed to publish message\n");
 
+	    snprintf(topic, 128, "xcomfort/%d/get/shutter", datapoint);
+
+	    if (mosquitto_publish(mosq, NULL, topic, strlen(xc_shutter_status_name(value)), xc_shutter_status_name(value), 1, true))
+		Error("failed to publish message\n");
+
 	    for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
 		if (dp->datapoint == datapoint)
 		{
@@ -303,12 +308,17 @@ MQTTGateway::TrySendMore()
 			xc_make_setpercent_msg(buffer, dp->datapoint, value, next_message_id);
 			break;
 
+		    case START_BOOL:
+			xc_make_setstartbool_msg(buffer, dp->datapoint, value, next_message_id);
+			break;
+
 		    case REQUEST_STATUS:
 			xc_make_requeststatus_msg(buffer, dp->datapoint, next_message_id);
 			break;
 
 		    default:
 			Error("Unsupported event\n");
+			return;
 		    }
 
 		    if (++next_message_id == 256)
@@ -434,19 +444,34 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
         SetDPValue(datapoint, value, DIM_STOP_OR_SET);
         break;
 
+    case MQTT_TOPIC_SHUTTER:
+        switch (shutter_cmd_type[(char*) message->payload])
+        {
+        case SHUTTER_CMD_DOWN:
+            value = 0x00;
+            break;
+        case SHUTTER_CMD_UP:
+            value = 0x01;
+            break;
+        case SHUTTER_CMD_STOP:
+            value = 0x02;
+            break;
+        }
+        SetDPValue(datapoint, value, START_BOOL);
+        break;
+
     case MQTT_TOPIC_STATUS:
         SetDPValue(datapoint, -1, REQUEST_STATUS);
         break;
 
     case MQTT_DEBUG:
         if (datapoint == 0)
-	{
+        {
             if (strcmp((char*) message->payload, "true") == 0)
                 verbose = true;
             else
                 verbose = false;
-	}
-
+        }
         break;
     }
 
