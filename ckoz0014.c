@@ -138,7 +138,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
             {
             case 6:
 		message_id = (unsigned char) buffer[4];
-                printf("no response ");
+                printf("no response \n");
                 break;
 
 	    default:

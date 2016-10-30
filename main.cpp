@@ -90,13 +90,13 @@ MQTTGateway::MessageReceived(mci_rx_event event,
 	    char topic[128];
 	    char state[128];
 	    
-	    snprintf(topic, 128, "%d/get/dimmer", datapoint);
+	    snprintf(topic, 128, "xcomfort/%d/get/dimmer", datapoint);
 	    snprintf(state, 128, "%d", value);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, strlen(state), (const uint8_t*) state, 1, true))
 		Error("failed to publish message\n");
 	    
-	    snprintf(topic, 128, "%d/get/switch", datapoint);
+	    snprintf(topic, 128, "xcomfort/%d/get/switch", datapoint);
 	    
 	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
 		Error("failed to publish message\n");
@@ -358,7 +358,7 @@ MQTTGateway::MQTTConnected(int rc)
     if (verbose)
 	Info("MQTT Connected, %s\n", mosquitto_connack_string(rc));
 
-    mosquitto_subscribe(mosq, NULL, "+/set/+", 0);
+    mosquitto_subscribe(mosq, NULL, "xcomfort/+/set/+", 0);
 }
 
 void
@@ -409,12 +409,12 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
 
     mosquitto_sub_topic_tokenise(message->topic, &topics, &topic_count);
 
-    int datapoint = strtol(topics[0], NULL, 10);
+    int datapoint = strtol(topics[1], NULL, 10);
 
     if (errno == EINVAL || errno == ERANGE)
         return;
 
-    switch (mqtt_topic_type[topics[2]])
+    switch (mqtt_topic_type[topics[3]])
     {
     case MQTT_TOPIC_SWITCH:
         if (strcmp((char*) message->payload, "true") == 0)
