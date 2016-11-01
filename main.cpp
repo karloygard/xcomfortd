@@ -192,11 +192,6 @@ MQTTGateway::SetDPValue(int datapoint, int value, mci_tx_event event)
 	    // reported implicitly or requested explicity if missing
 	    // anyways
 
-            if (event == SET_BOOLEAN && dp->event == DIM_STOP_OR_SET)
-                // This is a workaround to ignore
-
-                return;
-
 	    dp->new_value = value;
 	    dp->event = event;
 	}
