@@ -58,11 +58,11 @@ public:
 
     MQTTGateway(bool verbose, bool use_syslog);
 
-    virtual int Init(int epoll_fd,
-		     const char* server,
-		     int port,
-		     const char* username,
-		     const char* password);
+    virtual bool Init(int epoll_fd,
+		      const char* server,
+		      int port,
+		      const char* username,
+		      const char* password);
     virtual void Stop();
 
     long Prepoll(int epoll_fd);
@@ -109,8 +109,7 @@ private:
 
     virtual void AckReceived(int success, int message_id);
 
-    int epoll_fd;
-    epoll_event mosquitto_event;
+    bool RegisterSocket();
 
     // Mosquitto instance
 
@@ -137,6 +136,10 @@ private:
     // Log to syslog
 
     bool use_syslog;
+
+    // Time to reconnect, only set when we have been disconnected
+
+    long reconnect_time;
 };
 
 #endif
