@@ -173,8 +173,8 @@ USB::init_fds()
 }
 
 USB::USB()
-    : message_in_transit(false),
-      epoll_fd(-1),
+    : epoll_fd(-1),
+      message_in_transit(false),
       context(NULL),
       handle(NULL),
       recv_transfer(NULL),
@@ -186,7 +186,7 @@ USB::USB()
     data.user_data = this;
 }
 
-int
+bool
 USB::Init(int fd)
 {
     int err;

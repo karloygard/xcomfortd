@@ -22,7 +22,7 @@ public:
 
     USB();
 
-    virtual int Init(int epoll_fd);
+    virtual bool Init(int epoll_fd);
     virtual void Stop();
 
     virtual void Poll(const epoll_event& event);
@@ -34,6 +34,8 @@ protected:
 
     virtual void Error(const char* fmt, ...) = 0;
     virtual void Info(const char* fmt, ...) = 0;
+
+    int epoll_fd;
 
 private:
 
@@ -85,8 +87,6 @@ private:
     bool init_fds();
 
     bool message_in_transit;
-
-    int epoll_fd;
 
     xc_parse_data data;
 

@@ -46,7 +46,8 @@ MQTTGateway::MQTTGateway(bool verbose, bool use_syslog)
       next_message_id(0),
       messages_in_transit(0),
       verbose(verbose),
-      use_syslog(use_syslog)
+      use_syslog(use_syslog),
+      reconnect_time(LONG_MAX)
 {
 }
 
@@ -373,23 +374,11 @@ void
 MQTTGateway::MQTTDisconnected(int rc)
 {
     if (verbose)
-	Info("MQTT Disconnected, %s\n", mosquitto_connack_string(rc));
+	Info("MQTT Disconnected, %s\n", mosquitto_strerror(rc));
 
-    if (rc)
-    {
-        sleep(1);
+    // Attempt to reconnect in 15 seconds
 
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, mosquitto_socket(mosq), NULL) < 0)
-	    Error("epoll_ctl del failed %s\n", strerror(errno));
-
-	rc = mosquitto_reconnect(mosq);
-
-	if (rc)
-	    Info("MQTT, Reconnecting failed (%d), %s\n", rc, mosquitto_connack_string(rc));
-	else
-	    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, mosquitto_socket(mosq), &mosquitto_event) < 0)
-		Error("epoll_ctl add failed %s\n", strerror(errno));
-    }
+    reconnect_time = getmseconds() + 15000;
 }
 
 void
@@ -453,11 +442,9 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
     mosquitto_sub_topic_tokens_free(&topics, topic_count);
 }
 
-int
-MQTTGateway::Init(int fd, const char* server, int port, const char* username, const char* password)
+bool
+MQTTGateway::Init(int epoll_fd, const char* server, int port, const char* username, const char* password)
 {
-    epoll_fd = fd;
-
     char clientid[24];
     int err = 0;
     
@@ -477,14 +464,25 @@ MQTTGateway::Init(int fd, const char* server, int port, const char* username, co
     if (username && password)
     	mosquitto_username_pw_set(mosq, username, password);
 
-    err = mosquitto_connect(mosq, server, port, 60);
+    err = mosquitto_connect(mosq, server, port, 30);
 
     if (err)
     {
-	Error("failed to connect to MQTT server: %d\n", err);
+	Error("failed to connect to MQTT server: %s\n", mosquitto_strerror(err));
     	return false;
     }
-    
+
+    if (!USB::Init(epoll_fd))
+	return false;
+
+    return RegisterSocket();
+}
+
+bool
+MQTTGateway::RegisterSocket()
+{
+    epoll_event mosquitto_event;
+
     mosquitto_event.events = EPOLLIN;
     mosquitto_event.data.ptr = this;
 
@@ -494,7 +492,7 @@ MQTTGateway::Init(int fd, const char* server, int port, const char* username, co
         return false;
     }
 
-    return USB::Init(epoll_fd);
+    return true;
 }
 
 void
@@ -533,17 +531,39 @@ MQTTGateway::Prepoll(int epoll_fd)
 	    timeout -= getmseconds();
     }
 
-    // Mosquitto isn't making this easy
+    if (reconnect_time < getmseconds())
+    {
+	int rc = mosquitto_reconnect(mosq);
 
-    if (mosquitto_want_write(mosq))
-    {
-	mosquitto_event.events = EPOLLIN|EPOLLOUT;
-	epoll_ctl(epoll_fd, EPOLL_CTL_MOD, mosquitto_socket(mosq), &mosquitto_event);
+	if (rc)
+	{
+	    Info("MQTT, Reconnecting failed, %s\n", mosquitto_strerror(rc));
+
+	    // Attempt to reconnect in 15 seconds
+
+	    reconnect_time = getmseconds() + 15000;
+	}
+	else
+	{
+	    RegisterSocket();
+	    reconnect_time = LONG_MAX;
+	}
     }
-    else
+
+    if (mosquitto_socket(mosq) != -1)
     {
-	mosquitto_event.events = EPOLLIN;
-	epoll_ctl(epoll_fd, EPOLL_CTL_MOD, mosquitto_socket(mosq), &mosquitto_event);
+	// Mosquitto isn't making this easy
+
+	if (mosquitto_want_write(mosq))
+	{
+	    mosquitto_event.events = EPOLLIN|EPOLLOUT;
+	    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, mosquitto_socket(mosq), &mosquitto_event);
+	}
+	else
+	{
+	    mosquitto_event.events = EPOLLIN;
+	    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, mosquitto_socket(mosq), &mosquitto_event);
+	}
     }
 
     // Should be called "fairly frequently"
@@ -610,9 +630,9 @@ main(int argc, char* argv[])
     int epoll_fd = -1;
     char hostname[32] = "localhost";
     struct sigaction sigact;
-    char password[32];
+    char* password = NULL;
+    char* username = NULL;
     int port = 1883;
-    char username[32];
 
     int argindex = 0;
 
@@ -655,11 +675,11 @@ main(int argc, char* argv[])
 	    break;
 
 	case 'u':
-	    snprintf(username, sizeof(username), "%s", optarg);
+	    username = strdup(optarg);
 	    break;
 
 	case 'P':
-	    snprintf(password, sizeof(password), "%s", optarg);
+	    password = strdup(optarg);
 	    break;
 
 	default:
@@ -736,7 +756,13 @@ main(int argc, char* argv[])
     
 out:
     gateway.Stop();
-    
+
+    if (password)
+	free(password);
+
+    if (username)
+	free(username);
+
     if (do_exit == 1)
 	return 0;
 
