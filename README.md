@@ -21,8 +21,7 @@ messages:
  * MSG_DOWN_RELEASED
  * MSG_STATUS
 
-Furthermore, it can send on/off/dim% messages to devices.  Messages
-for controlling eg. shutters is outlined, but untested.
+Furthermore, it can send on/off/dim%/start/stop messages to devices.
 
 xComfort status messages are not routed and have no delivery
 guarantees.  When status messages are lost, lights may for instance be
@@ -52,22 +51,29 @@ The application subscribes to the topics:
 
     "xcomfort/+/set/dimmer" (accepts values from 0-100)
     "xcomfort/+/set/switch" (accepts true or false)
+    "xcomfort/+/set/shutter" (accepts down, up or stop)
+    "xcomfort/+/set/requeststatus" (value is ignored)
 
 and publishes on the topics:
 
     "xcomfort/[datapoint number]/get/dimmer" (value from 0-100)
     "xcomfort/[datapoint number]/get/switch" (true or false)
+    "xcomfort/[datapoint number]/get/shutter" (up, down or stop)
 
 Sending `true` to topic `xcomfort/1/set/switch` will send a message to
 datapoint 1 to turn on.  This will work for both switches and dimmers.
-Sending the value `50` to `xcomfort/1/set/dimmer` will send a message to
-datapoint 1 to set 50% dimming.  This will work only for dimmers.
+Sending the value `50` to `xcomfort/1/set/dimmer` will send a message
+to datapoint 1 to set 50% dimming.  This will work only for dimmers.
 
-Likewise, `xcomfort/1/get/dimmer` and `xcomfort/1/get/switch`
-will be set to the value reported by the dimmer/switch, if and when 
-datapoint 1 reports changes.  Status reports are not routed in the xComfort
-network, so if your CI stick is not able to reach all devices, these status
-messages will be lost.
+Likewise, `xcomfort/1/get/dimmer` and `xcomfort/1/get/switch` will be
+set to the value reported by the dimmer/switch, if and when datapoint
+1 reports changes.  Subscribe to the topic that's relevant for the
+device that's actually associated with the datapoint.  Status reports
+are not routed in the xComfort network, so if your CI stick is not
+able to hear all devices, these status messages will be lost.
+
+By sending any message to the topic "xcomfort/1/set/requeststatus",
+the application will ask datapoint 1 to report its status.
 
 _WARNING: The firmware "RF V2.08 - USB V2.05" is buggy and will read
 status reports from dimmers incorrectly as always off.  This is
@@ -75,4 +81,5 @@ resolved in the later "RF V2.10 - USB V2.05" firmware._
 
 Copyright 2016 Karl Anders Øygard. All rights reserved.  Use of this
 source code is governed by a BSD-style license that can be found in
-the LICENSE file.  Some code was contributed by Hans Karlinius.
+the LICENSE file.  The code for shutters was contributed by Hans
+Karlinius.

@@ -186,7 +186,7 @@ void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
     }
 }
 
-void xc_make_setstartbool_msg(char* buffer, int datapoint, int cmd, int message_id)
+void xc_make_startbool_msg(char* buffer, int datapoint, mci_sb_command cmd, int message_id)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 

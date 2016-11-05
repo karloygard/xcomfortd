@@ -177,7 +177,7 @@ MQTTGateway::AckReceived(int success, int message_id)
 }
 
 void
-MQTTGateway::SetDPValue(int datapoint, int value, mci_tx_event event)
+MQTTGateway::SendDPValue(int datapoint, int value, mci_tx_event event)
 {
     datapoint_change* dp = change_buffer;
 
@@ -310,7 +310,7 @@ MQTTGateway::TrySendMore()
 			break;
 
 		    case START_BOOL:
-			xc_make_setstartbool_msg(buffer, dp->datapoint, value, next_message_id);
+			xc_make_startbool_msg(buffer, dp->datapoint, (mci_sb_command) value, next_message_id);
 			break;
 
 		    case REQUEST_STATUS:
@@ -421,7 +421,7 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
         else
             value = false;
 
-        SetDPValue(datapoint, value, SET_BOOLEAN);
+        SendDPValue(datapoint, value, SET_BOOLEAN);
         break;
 
     case MQTT_TOPIC_DIMMER:
@@ -430,27 +430,15 @@ MQTTGateway::MQTTMessage(const struct mosquitto_message* message)
         if (errno == EINVAL || errno == ERANGE)
             return;
 
-        SetDPValue(datapoint, value, DIM_STOP_OR_SET);
+        SendDPValue(datapoint, value, DIM_STOP_OR_SET);
         break;
 
     case MQTT_TOPIC_SHUTTER:
-        switch (shutter_cmd_type[(char*) message->payload])
-        {
-        case SHUTTER_CMD_DOWN:
-            value = 0x00;
-            break;
-        case SHUTTER_CMD_UP:
-            value = 0x01;
-            break;
-        case SHUTTER_CMD_STOP:
-            value = 0x02;
-            break;
-        }
-        SetDPValue(datapoint, value, START_BOOL);
+	SendDPValue(datapoint, shutter_cmd_type[(char*) message->payload], START_BOOL);
         break;
 
-    case MQTT_TOPIC_STATUS:
-        SetDPValue(datapoint, -1, REQUEST_STATUS);
+    case MQTT_TOPIC_REQUEST_STATUS:
+        SendDPValue(datapoint, -1, REQUEST_STATUS);
         break;
 
     case MQTT_DEBUG:

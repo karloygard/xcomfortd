@@ -134,6 +134,17 @@ enum mci_shutter_status
     SHUTTER_DOWN        = 0x02
 };
 
+// Commands for shutters
+
+enum mci_sb_command
+{
+    SHUTTER_CMD_DOWN      = 0x00,
+    SHUTTER_CMD_UP        = 0x01,
+    SHUTTER_CMD_STOP      = 0x02,
+    SHUTTER_CMD_STEP_DOWN = 0x10,
+    SHUTTER_CMD_STEP_UP   = 0x11
+};
+
 /* Data types that can be received from a datapoint
 
    These are events that are known by MRF, they may not all
@@ -258,7 +269,7 @@ const char* xc_shutter_status_name(int state);
 const char* xc_battery_status_name(enum mci_battery_status state);
 const char* xc_rxevent_name(enum mci_rx_event event);
 
-void xc_make_setstartbool_msg(char* buffer, int datapoint, int cmd, int message_id);
+void xc_make_startbool_msg(char* buffer, int datapoint, mci_sb_command cmd, int message_id);
 void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id);
 void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id);
 void xc_make_requeststatus_msg(char* buffer, int datapoint, int message_id);

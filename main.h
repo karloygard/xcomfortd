@@ -18,7 +18,7 @@ enum mqtt_topics
     MQTT_TOPIC_SWITCH,
     MQTT_TOPIC_DIMMER,
     MQTT_TOPIC_SHUTTER,
-    MQTT_TOPIC_STATUS,
+    MQTT_TOPIC_REQUEST_STATUS,
     MQTT_DEBUG
 };
 
@@ -26,18 +26,11 @@ std::map<std::string, mqtt_topics> mqtt_topic_type = {
     { "switch", MQTT_TOPIC_SWITCH },
     { "dimmer", MQTT_TOPIC_DIMMER },
     { "shutter", MQTT_TOPIC_SHUTTER },
-    { "status", MQTT_TOPIC_STATUS },
+    { "requeststatus", MQTT_TOPIC_REQUEST_STATUS },
     { "debug", MQTT_DEBUG }
 };
 
-enum shutter_cmds
-{
-    SHUTTER_CMD_DOWN,
-    SHUTTER_CMD_UP,
-    SHUTTER_CMD_STOP,
-};
-
-std::map<std::string, shutter_cmds> shutter_cmd_type = {
+std::map<std::string, mci_sb_command> shutter_cmd_type = {
     { "down", SHUTTER_CMD_DOWN },
     { "up", SHUTTER_CMD_UP },
     { "stop", SHUTTER_CMD_STOP }
@@ -83,7 +76,7 @@ public:
     long Prepoll(int epoll_fd);
     virtual void Poll(const epoll_event& event);
 
-    void SetDPValue(int datapoint, int value, mci_tx_event event);
+    void SendDPValue(int datapoint, int value, mci_tx_event event);
 
 protected:
 
