@@ -8,10 +8,7 @@
 
 #include <errno.h>
 #include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
-
-#include <libusb-1.0/libusb.h>
 #include <poll.h>
 #include <sys/epoll.h>
 
@@ -197,7 +194,7 @@ USB::Init(int fd)
     if (err < 0)
     {
 	Error("failed to initialise libusb\n");
-	exit(1);
+	return false;
     }
     
     handle = libusb_open_device_with_vid_pid(context, 0x188a, 0x1101);

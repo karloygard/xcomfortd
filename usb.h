@@ -9,6 +9,8 @@
 #ifndef _USB_H_
 #define _USB_H_
 
+#include <libusb-1.0/libusb.h>
+
 #include "ckoz0014.h"
 
 #define INTR_RECV_LENGTH	32

@@ -8,7 +8,7 @@ default: xcomfortd # test
 %.o: %.c
 	$(CXX) $(CFLAGS) -c $< -o $@
 
-xcomfortd: ckoz0014.o usb.o main.o
+xcomfortd: ckoz0014.o usb.o mqtt.o main.o
 	$(CXX) $(LDFLAGS) $^ $(LIBS) -o $@
 
 test: ckoz0013/ckoz0013.o ckoz0013/lib_crc.o
