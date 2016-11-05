@@ -72,7 +72,7 @@ device that's actually associated with the datapoint.  Status reports
 are not routed in the xComfort network, so if your CI stick is not
 able to hear all devices, these status messages will be lost.
 
-By sending any message to the topic "xcomfort/1/set/requeststatus",
+By sending any message to the topic `xcomfort/1/set/requeststatus`,
 the application will ask datapoint 1 to report its status.
 
 _WARNING: The firmware "RF V2.08 - USB V2.05" is buggy and will read
@@ -81,5 +81,5 @@ resolved in the later "RF V2.10 - USB V2.05" firmware._
 
 Copyright 2016 Karl Anders Øygard. All rights reserved.  Use of this
 source code is governed by a BSD-style license that can be found in
-the LICENSE file.  The code for shutters was contributed by Hans
-Karlinius.
+the LICENSE file.  The code for shutters and more was contributed by
+Hans Karlinius.
