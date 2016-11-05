@@ -50,24 +50,24 @@ provided.  This can be used eg. to interface an xComfort installation with
 or [Home Assistant](https://home-assistant.io/), with a little imagination.
 The application subscribes to the topics:
 
-    "+/set/dimmer" (accepts values from 0-100)
-    "+/set/switch" (accepts true or false)
+    "xcomfort/+/set/dimmer" (accepts values from 0-100)
+    "xcomfort/+/set/switch" (accepts true or false)
 
 and publishes on the topics:
 
-    "[datapoint number]/get/dimmer" (value from 0-100)
-    "[datapoint number]/get/switch" (true or false)
+    "xcomfort/[datapoint number]/get/dimmer" (value from 0-100)
+    "xcomfort/[datapoint number]/get/switch" (true or false)
 
-Sending `true` to topic `1/set/switch` will send a message to
+Sending `true` to topic `xcomfort/1/set/switch` will send a message to
 datapoint 1 to turn on.  This will work for both switches and dimmers.
-Sending the value `50` to `1/set/dimmer` will send a message to
+Sending the value `50` to `xcomfort/1/set/dimmer` will send a message to
 datapoint 1 to set 50% dimming.  This will work only for dimmers.
 
-Likewise, `1/get/dimmer` and `1/get/switch` will be set to the value
-reported by the dimmer/switch, if and when datapoint 1 reports
-changes.  Status reports are not routed in the xComfort network, so if
-your CI stick is not able to reach all devices, these status messages
-will be lost.
+Likewise, `xcomfort/1/get/dimmer` and `xcomfort/1/get/switch`
+will be set to the value reported by the dimmer/switch, if and when 
+datapoint 1 reports changes.  Status reports are not routed in the xComfort
+network, so if your CI stick is not able to reach all devices, these status
+messages will be lost.
 
 _WARNING: The firmware "RF V2.08 - USB V2.05" is buggy and will read
 status reports from dimmers incorrectly as always off.  This is
