@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <poll.h>
 #include <sys/epoll.h>
 
@@ -171,7 +172,7 @@ USB::init_fds()
 
 USB::USB()
     : epoll_fd(-1),
-      message_in_transit(false),
+      message_in_transit(true),
       context(NULL),
       handle(NULL),
       recv_transfer(NULL),
@@ -277,6 +278,8 @@ int
 USB::Send(const char* buffer, size_t length)
 {
     int err;
+
+    assert(!message_in_transit);
 
     bzero(sendbuf, INTR_SEND_LENGTH);
     memcpy(sendbuf, buffer, length);
