@@ -11,7 +11,7 @@
 
 #include "usb.h"
 
-long getmseconds();
+int64_t getmseconds();
 
 class MQTTGateway
     : public USB
@@ -27,7 +27,7 @@ public:
 		      const char* password);
     virtual void Stop();
 
-    virtual long Prepoll(int epoll_fd);
+    virtual int Prepoll(int epoll_fd);
     virtual void Poll(const epoll_event& event);
 
 protected:
@@ -62,7 +62,7 @@ private:
 
     // Time to reconnect, only set when we have been disconnected
 
-    long reconnect_time;
+    int64_t reconnect_time;
 };
 
 #endif

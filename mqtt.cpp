@@ -15,18 +15,18 @@
 
 #include "mqtt.h"
 
-long getmseconds()
+int64_t getmseconds()
 {
     struct timespec tp;
 
     clock_gettime(CLOCK_MONOTONIC_COARSE, &tp);
-    return long(tp.tv_sec * 1000) + (tp.tv_nsec / 1000000);
+    return (int64_t(tp.tv_sec) * 1000) + (tp.tv_nsec / 1000000);
 }
 
 MQTTGateway::MQTTGateway(bool verbose)
     : verbose(verbose),
       mosq(NULL),
-      reconnect_time(LONG_MAX)
+      reconnect_time(INT64_MAX)
 {
 }
 
@@ -44,7 +44,7 @@ MQTTGateway::MQTTConnected(int rc)
     if (verbose)
 	Info("MQTT Connected, %s\n", mosquitto_connack_string(rc));
 
-    mosquitto_subscribe(mosq, NULL, "+/set/+", 0);
+    mosquitto_subscribe(mosq, NULL, "xcomfort/+/set/+", 0);
 }
 
 void
@@ -143,7 +143,7 @@ MQTTGateway::Stop()
     mosquitto_lib_cleanup();
 }
 
-long
+int
 MQTTGateway::Prepoll(int epoll_fd)
 {
     epoll_event mosquitto_event;
@@ -165,7 +165,7 @@ MQTTGateway::Prepoll(int epoll_fd)
 	else
 	{
 	    RegisterSocket();
-	    reconnect_time = LONG_MAX;
+	    reconnect_time = INT64_MAX;
 	}
     }
 

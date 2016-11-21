@@ -10,8 +10,6 @@
 #define _XC_TO_MQTT_GATEWAY_H_
 
 #include "mqtt.h"
-#include <map>
-#include <string>
 
 struct datapoint_change
 {
@@ -27,10 +25,11 @@ struct datapoint_change
     // number of status requests sent
     int sent_status_requests;
 
+    // Event to be sent
     mci_tx_event event;
 
-    // non zero when we're waiting for an ack
-    long timeout;
+    // Non zero when we're waiting for an ack
+    int64_t timeout;
 
     // The id we're waiting for an ack for
     int active_message_id;
@@ -43,7 +42,7 @@ public:
 
     XCtoMQTT(bool verbose, bool use_syslog);
 
-    long Prepoll(int epoll_fd);
+    int Prepoll(int epoll_fd);
 
     void SendDPValue(int datapoint, int value, mci_tx_event event);
 

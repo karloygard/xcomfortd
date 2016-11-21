@@ -17,6 +17,7 @@
 #include <syslog.h>
 #include <getopt.h>
 #include <stdarg.h>
+#include <map>
 
 #include "main.h"
 
@@ -249,7 +250,7 @@ XCtoMQTT::TrySendMore()
 
     if (CanSend())
     {
-	long current_time = getmseconds();
+	int64_t current_time = getmseconds();
 	datapoint_change* dp = change_buffer;
 	datapoint_change* prev = NULL;
 
@@ -415,16 +416,21 @@ XCtoMQTT::MQTTMessage(const struct mosquitto_message* message)
                 verbose = false;
         }
         break;
+
+    default:
+	Error("Unknown topic\n");
+        break;
     }
 
     mosquitto_sub_topic_tokens_free(&topics, topic_count);
 }
 
-long
+int
 XCtoMQTT::Prepoll(int epoll_fd)
 {
-    long next_change = LONG_MAX;
-    long timeout = MQTTGateway::Prepoll(epoll_fd);
+    int next_change = INT_MAX;
+    int timeout = MQTTGateway::Prepoll(epoll_fd);
+    int64_t current_time = getmseconds();
 
     if (change_buffer)
     {
@@ -433,11 +439,8 @@ XCtoMQTT::Prepoll(int epoll_fd)
 	// Find lowest timeout
 
 	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
-	    if (dp->new_value != -1 && next_change > dp->timeout)
-		next_change = dp->timeout;
-
-	if (next_change != LONG_MAX)
-	    next_change -= getmseconds();
+	    if (dp->new_value != -1 && next_change > dp->timeout - current_time)
+		next_change = dp->timeout - current_time;
     }
 
     if (timeout < next_change)
