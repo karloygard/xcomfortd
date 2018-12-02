@@ -41,7 +41,7 @@ USB::Received(struct libusb_transfer* transfer)
     }
     else
     {
-	xc_parse_packet((char*) transfer->buffer, transfer->length, &data);
+	xc_parse_packet((unsigned char*) transfer->buffer, transfer->length, &data);
 
 	// Resubmit transfer
     
@@ -52,14 +52,15 @@ USB::Received(struct libusb_transfer* transfer)
 
 void
 USB::relno(void* user_data,
-	   int rf_major,
-	   int rf_minor,
-	   int usb_major,
-	   int usb_minor)
+	   int status,
+	   unsigned int rf_major,
+	   unsigned int rf_minor,
+	   unsigned int usb_major,
+	   unsigned int usb_minor)
 {
     USB* this_object = (USB*) user_data;
 
-    this_object->Relno(rf_major, rf_minor, usb_major, usb_minor);
+    this_object->Relno(status, rf_major, rf_minor, usb_major, usb_minor);
 }
 
 void
@@ -69,7 +70,7 @@ USB::message_received(void* user_data,
 		      mci_rx_datatype data_type,
 		      int value,
 		      int signal,
-		      mci_battery_status battery)
+		      mgw_rx_battery battery)
 {
     USB* this_object = (USB*) user_data;
 
@@ -253,7 +254,7 @@ USB::Init(int fd)
     if (err < 0)
 	return false;
 
-    xc_make_mgmt_msg((char*) sendbuf, CK_RELNO, 0);
+    xc_make_config_msg((char*) sendbuf, MGW_CT_RELEASE, 0x10);
     
     err = libusb_submit_transfer(send_transfer);
     if (err < 0)

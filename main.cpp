@@ -41,9 +41,9 @@ std::map<std::string, mqtt_topics> mqtt_topic_type = {
 };
 
 std::map<std::string, mci_sb_command> shutter_cmd_type = {
-    { "down", SHUTTER_CMD_DOWN },
-    { "up", SHUTTER_CMD_UP },
-    { "stop", SHUTTER_CMD_STOP }
+    { "down", MGW_TED_CLOSE },
+    { "up", MGW_TED_OPEN },
+    { "stop", MGW_TED_JSTOP }
 };
 
 static void
@@ -62,17 +62,26 @@ XCtoMQTT::XCtoMQTT(bool verbose, bool use_syslog)
 }
 
 void
-XCtoMQTT::Relno(int rf_major,
-		int rf_minor,
-		int usb_major,
-		int usb_minor)
+XCtoMQTT::Relno(int status,
+		unsigned int rf_major,
+		unsigned int rf_minor,
+		unsigned int usb_major,
+		unsigned int usb_minor)
 {
     if (verbose)
-	Info("CKOZ-00/14 version numbers: RFV%d.%02d, USBV%d.%02d\n",
-	     rf_major,
-	     rf_minor,
-	     usb_major,
-	     usb_minor);
+    {
+        if (status == 0x10)
+	    Info("CKOZ-00/14 revision numbers: HW-Rev %d, RF-Rev %d, FW-Rev %d\n",
+	         rf_major,
+	         rf_minor,
+	         (usb_major << 8) + usb_minor);
+        else
+	    Info("CKOZ-00/14 version numbers: RFV%d.%02d, USBV%d.%02d\n",
+	         rf_major,
+	         rf_minor,
+	         usb_major,
+	         usb_minor);
+    }
 }
 
 void
@@ -80,16 +89,16 @@ XCtoMQTT::MessageReceived(mci_rx_event event,
 			  int datapoint,
 			  mci_rx_datatype data_type,
 			  int value,
-			  int signal,
-			  mci_battery_status battery)
+			  int rssi,
+			  mgw_rx_battery battery)
 {
     if (verbose)
-	Info("received MCI_PT_RX(%s): datapoint: %d value_type: %d value: %d (signal: %d) (battery: %s)\n",
+	Info("received MGW_PT_RX(%s): datapoint: %d value_type: %d value: %d (signal: %s) (battery: %s)\n",
              xc_rxevent_name(event),
 	     datapoint,
 	     data_type,
 	     value,
-	     signal,
+             xc_rssi_status_name(rssi),
              xc_battery_status_name(battery));
 
     switch (event)
@@ -120,7 +129,7 @@ XCtoMQTT::MessageReceived(mci_rx_event event,
 	    for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
 		if (dp->datapoint == datapoint)
 		{
-		    if (dp->event == REQUEST_STATUS)
+		    if (dp->event == MGW_TE_REQUEST)
 			// We're done
 
 			dp->sent_status_requests = 3;
@@ -167,9 +176,9 @@ XCtoMQTT::AckReceived(int success, int message_id)
 		    // be sent if status is not received within
 		    // reasonable time
 
-		    if (dp->event != REQUEST_STATUS)
+		    if (dp->event != MGW_TE_REQUEST)
 		    {
-			dp->event = REQUEST_STATUS;
+			dp->event = MGW_TE_REQUEST;
 			dp->sent_status_requests = 0;
 		    }
 
@@ -201,9 +210,9 @@ XCtoMQTT::SendDPValue(int datapoint, int value, mci_tx_event event)
 	// values in place and let the system handle it when it's
 	// ready
 
-	if (event != REQUEST_STATUS)
+	if (event != MGW_TE_REQUEST)
 	{
-	    // No need to do this for REQUEST_STATUS, status will be
+	    // No need to do this for MGW_TE_REQUEST, status will be
 	    // reported implicitly or requested explicity if missing
 	    // anyways
 
@@ -236,7 +245,7 @@ XCtoMQTT::SendDPValue(int datapoint, int value, mci_tx_event event)
 void
 XCtoMQTT::TrySendMore()
 {
-    if (messages_in_transit >= 1)
+    if (messages_in_transit >= 4)
 	/* Number of messages we can run in parallel.
 	   
            The stick appears to run into issues when handling multiple
@@ -262,7 +271,7 @@ XCtoMQTT::TrySendMore()
 
 		if (dp->active_message_id != -1 ||
 		    dp->new_value != -1 ||
-		    (dp->event == REQUEST_STATUS &&
+		    (dp->event == MGW_TE_REQUEST &&
 		     dp->sent_status_requests < 3))
 		{
 		    // Unacked or unsent; needs attention
@@ -288,7 +297,7 @@ XCtoMQTT::TrySendMore()
 		    {
 			value = dp->new_value;
 
-			if (dp->event == REQUEST_STATUS)
+			if (dp->event == MGW_TE_REQUEST)
 			{
 			    if (verbose)
 				Info("requesting status from DP %d (message id %d, try %d)\n",
@@ -311,20 +320,20 @@ XCtoMQTT::TrySendMore()
 
 		    switch (dp->event)
 		    {
-		    case SET_BOOLEAN:
+		    case MGW_TE_SWITCH:
 			xc_make_switch_msg(buffer, dp->datapoint, value != 0, next_message_id);
 			break;
 
-		    case DIM_STOP_OR_SET:
-			xc_make_setpercent_msg(buffer, dp->datapoint, value, next_message_id);
+		    case MGW_TE_DIM:
+			xc_make_dim_msg(buffer, dp->datapoint, value, next_message_id);
 			break;
 
-		    case START_BOOL:
-			xc_make_startbool_msg(buffer, dp->datapoint, (mci_sb_command) value, next_message_id);
+		    case MGW_TE_JALO:
+			xc_make_jalo_msg(buffer, dp->datapoint, (mci_sb_command) value, next_message_id);
 			break;
 
-		    case REQUEST_STATUS:
-			xc_make_requeststatus_msg(buffer, dp->datapoint, next_message_id);
+		    case MGW_TE_REQUEST:
+			xc_make_request_msg(buffer, dp->datapoint, next_message_id);
 			break;
 
 		    default:
@@ -332,7 +341,7 @@ XCtoMQTT::TrySendMore()
 			return;
 		    }
 
-		    if (++next_message_id == 256)
+		    if (++next_message_id == 16)
 			next_message_id = 0;
 
 		    Send(buffer, 9);
@@ -387,7 +396,7 @@ XCtoMQTT::MQTTMessage(const struct mosquitto_message* message)
         else
             value = false;
 
-        SendDPValue(datapoint, value, SET_BOOLEAN);
+        SendDPValue(datapoint, value, MGW_TE_SWITCH);
         break;
 
     case MQTT_TOPIC_DIMMER:
@@ -396,15 +405,15 @@ XCtoMQTT::MQTTMessage(const struct mosquitto_message* message)
         if (errno == EINVAL || errno == ERANGE)
             return;
 
-        SendDPValue(datapoint, value, DIM_STOP_OR_SET);
+        SendDPValue(datapoint, value, MGW_TE_DIM);
         break;
 
     case MQTT_TOPIC_SHUTTER:
-	SendDPValue(datapoint, shutter_cmd_type[(char*) message->payload], START_BOOL);
+	SendDPValue(datapoint, shutter_cmd_type[(char*) message->payload], MGW_TE_JALO);
         break;
 
     case MQTT_TOPIC_REQUEST_STATUS:
-        SendDPValue(datapoint, -1, REQUEST_STATUS);
+        SendDPValue(datapoint, -1, MGW_TE_REQUEST);
         break;
 
     case MQTT_DEBUG:

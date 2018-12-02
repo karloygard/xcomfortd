@@ -57,17 +57,18 @@ private:
 
     void MQTTMessage(const struct mosquitto_message* message);
 
-    virtual void Relno(int rf_major,
-		       int rf_minor,
-		       int usb_major,
-		       int usb_minor);
+    virtual void Relno(int status,
+		       unsigned int rf_major,
+		       unsigned int rf_minor,
+		       unsigned int usb_major,
+		       unsigned int usb_minor);
 
     virtual void MessageReceived(mci_rx_event event,
 				 int datapoint,
 				 mci_rx_datatype data_type,
 				 int value,
 				 int signal,
-				 mci_battery_status battery);
+				 mgw_rx_battery battery);
 
     virtual void AckReceived(int success, int message_id);
 

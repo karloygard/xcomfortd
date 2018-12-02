@@ -53,18 +53,32 @@ const char* xc_rxevent_name(enum mci_rx_event event)
     }
 }
 
-const char* xc_battery_status_name(enum mci_battery_status state)
+const char* xc_rssi_status_name(int rssi)
+{
+    if (rssi <= 67)
+        return "good";
+    else if (rssi <= 75)
+        return "normal";
+    else if (rssi <= 90)
+        return "weak";
+    else if (rssi <= 120)
+        return "very weak";
+    else
+        return "unknown";
+}
+
+const char* xc_battery_status_name(enum mgw_rx_battery state)
 {
     switch (state)
     {
     default:
-    case BATTERY_NA:         return "unknown";
-    case BATTERY_EMPTY:      return "empty";
-    case BATTERY_WEAK:       return "weak";
-    case BATTERY_AVERAGE:    return "average";
-    case BATTERY_ALMOSTFULL: return "almost full";
-    case BATTERY_FULL:       return "full";
-    case POWERLINE:          return "powerline";
+    case MGW_RB_NA:  return "not available";
+    case MGW_RB_0:   return "empty";
+    case MGW_RB_25:  return "very weak";
+    case MGW_RB_50:  return "weak";
+    case MGW_RB_75:  return "good";
+    case MGW_RB_100: return "new";
+    case MGW_RB_PWR: return "powerline";
     }
 }
 
@@ -79,7 +93,7 @@ const char* xc_shutter_status_name(int state)
     }
 }
 
-void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
+void xc_parse_packet(const unsigned char* buffer, size_t size, xc_parse_data* data)
 {
     struct xc_ci_message* msg = (struct xc_ci_message*) buffer;
 
@@ -87,50 +101,54 @@ void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
         size < msg->message_size)
 	return;
 
-    switch (msg->action)
+    switch (msg->type)
     {
-    case MCI_PT_RX:
+    case MGW_PT_RX:
 	data->recv(data->user_data,
 		   (enum mci_rx_event) msg->packet_rx.rx_event,
 		   msg->packet_rx.datapoint,
 		   (enum mci_rx_datatype) msg->packet_rx.rx_data_type,
 		   msg->packet_rx.value,
-		   msg->packet_rx.signal,
-		   (enum mci_battery_status) msg->packet_rx.battery);
+		   msg->packet_rx.rssi,
+		   (enum mgw_rx_battery) msg->packet_rx.battery);
 
 	break;
     
-    case MCI_PT_ACK:
+    case MGW_PT_STATUS:
     {
         int i;
 	int message_id = -1;
 
         // The ACK parsing isn't completely understood
 
-        switch (buffer[2])
+        switch (msg->pt_status.type)
         {
-        case CK_SERIAL:
-            printf("serial number: %08x\n", ntohl(msg->packet_ack.data));
+        case MGW_STT_SERIAL:
+            printf("serial number: %08x\n", ntohl(msg->pt_status.data));
             return;
 
-        case CK_RELNO:
-	    data->relno(data->user_data, buffer[4], buffer[5], buffer[6], buffer[7]);
+        case MGW_STT_RELEASE:
+	    data->relno(data->user_data, msg->pt_status.status, buffer[4], buffer[5], buffer[6], buffer[7]);
             return;
 
-        case CK_COUNTER_RX:
-            printf("counter rx: %08x\n", msg->packet_ack.data);
+        case MGW_CT_COUNTER_RX:
+            printf("counter rx: %08x\n", msg->pt_status.data);
             return;
 
-        case CK_COUNTER_TX:
-            printf("counter tx: %08x\n", msg->packet_ack.data);
+        case MGW_CT_COUNTER_TX:
+            printf("counter tx: %08x\n", msg->pt_status.data);
             return;
 
-        case CK_TIMEACCOUNT:
+        case MGW_STT_TIMEACCOUNT:
             printf("time account: %d%%\n", buffer[4]);
             return;
 
+        case MGW_STT_SEND_RFSEQNO:
+            printf("RF sequence no flag: %d\n", msg->pt_status.status);
+            return;
+
         default:
-	    printf("received MCI_PT_ACK(%d) [", msg->message_size);
+	    printf("received MGW_PT_STATUS(%d) [", msg->message_size);
 
 	    for (i = 2; i < msg->message_size; ++i)
 	        printf("%02hhx ", buffer[i]);
@@ -138,76 +156,86 @@ void xc_parse_packet(const char* buffer, size_t size, xc_parse_data* data)
 	    printf("]\n");
             return;
 
-        case CK_SUCCESS:
-	    message_id = (unsigned char) buffer[4];
+        case MGW_STT_OK:
+	    message_id = buffer[4];
             break;
 
-        case CK_ERROR:
+        case MGW_STT_ERROR:
             printf("error message: ");
 
-            switch (buffer[3])
+            switch (msg->pt_status.status)
             {
-            case 6:
-		message_id = (unsigned char) buffer[4];
-                printf("no response \n");
+            case MGW_STS_GENERAL:
+                printf("general error\n");
+	        message_id = (unsigned char) buffer[5];
                 break;
 
-	    default:
-            case 5:
-		// Possibly overflowing buffers
-		printf("unknown\n");
-		break;
-
-            case 1:
+            case MGW_STS_UNKNOWN:
                 printf("unknown command\n");
 	        message_id = (unsigned char) buffer[5];
                 break;
 
-            case 0:
-                printf("unknown dp\n");
-	        message_id = (unsigned char) buffer[5];
+            case MGW_STS_DP_OOR:
+		printf("datapoint out of range\n");
+		break;
+
+            case MGW_STS_BUSY_MRF:
+		printf("rf busy (tx message lost)\n");
+		break;
+
+            case MGW_STS_BUSY_MRF_RX:
+		printf("rf busy (rx in progress)\n");
+		break;
+
+            case MGW_STS_TX_MSG_LOST:
+		printf("tx message lost; repeat it\n");
+		break;
+
+            case MGW_STS_NO_ACK:
+                printf("timeout; no ack received\n");
+		message_id = (unsigned char) buffer[4];
                 break;
             }
             break;
         }
 
-	data->ack(data->user_data, buffer[2] == 0x1c, message_id);
+	data->ack(data->user_data, buffer[2] == 0x1c, message_id >> 4);
 
 	break;
     }
 
-    case MCI_PT_FW:
+    case MGW_PT_FW:
 	printf("Firmware version: %d.%02d\n", buffer[11], buffer[12]);
 	break;
 
     default:
-	printf("unprocessed: received %02x: %d\n", msg->action, msg->message_size);
+	printf("unprocessed: received %02x: %d\n", msg->type, msg->message_size);
 	break;
     }
 }
 
-void xc_make_startbool_msg(char* buffer, int datapoint, mci_sb_command cmd, int message_id)
+void xc_make_jalo_msg(char* buffer, int datapoint, mci_sb_command cmd, int message_id)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
     message->message_size = 0x9;
-    message->action = MCI_PT_TX;
+    message->type = MGW_PT_TX;
     message->packet_tx.datapoint = datapoint;
-    message->packet_tx.tx_event = START_BOOL;
+    message->packet_tx.tx_event = MGW_TE_JALO;
     message->packet_tx.value = cmd;
-    message->packet_tx.message_id = message_id;
+    message->packet_tx.seq_and_pri = message_id << 4;
 }
 
-void xc_make_setpercent_msg(char* buffer, int datapoint, int value, int message_id)
+void xc_make_dim_msg(char* buffer, int datapoint, int value, int message_id)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
     message->message_size = 0x9;
-    message->action = MCI_PT_TX;
+    message->type = MGW_PT_TX;
     message->packet_tx.datapoint = datapoint;
-    message->packet_tx.tx_event = DIM_STOP_OR_SET;
+    message->packet_tx.tx_event = MGW_TE_DIM;
     message->packet_tx.value = (value << 8) + 0x40;
-    message->packet_tx.message_id = message_id;
+    message->packet_tx.seq_and_pri = message_id << 4;
 }
 
 void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
@@ -215,31 +243,31 @@ void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
     message->message_size = 0x9;
-    message->action = MCI_PT_TX;
+    message->type = MGW_PT_TX;
     message->packet_tx.datapoint = datapoint;
-    message->packet_tx.tx_event = SET_BOOLEAN;
+    message->packet_tx.tx_event = MGW_TE_SWITCH;
     message->packet_tx.value = on;
-    message->packet_tx.message_id = message_id;
+    message->packet_tx.seq_and_pri = message_id << 4;
 }
 
-void xc_make_requeststatus_msg (char* buffer, int datapoint, int message_id)
+void xc_make_request_msg (char* buffer, int datapoint, int message_id)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
     message->message_size = 0x9;
-    message->action = MCI_PT_TX;
+    message->type = MGW_PT_TX;
     message->packet_tx.datapoint = datapoint;
-    message->packet_tx.tx_event = REQUEST_STATUS;
-    message->packet_tx.message_id = message_id;
+    message->packet_tx.tx_event = MGW_TE_REQUEST;
+    message->packet_tx.seq_and_pri = message_id << 4;
 }
 
-void xc_make_mgmt_msg(char* buffer, int type, int mode)
+void xc_make_config_msg(char* buffer, int type, int mode)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
     message->message_size = 0x4;
-    message->action = MCI_PT_MGMT;
-    message->packet_mgmt.type = type;
-    message->packet_mgmt.mode = mode;
+    message->type = MGW_PT_CONFIG;
+    message->pt_config.type = type;
+    message->pt_config.mode = mode;
 }
 

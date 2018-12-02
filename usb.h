@@ -42,10 +42,11 @@ protected:
 private:
 
     static void relno(void* user_data,
-		      int rf_major,
-		      int rf_minor,
-		      int usb_major,
-		      int usb_minor);
+		      int status,
+		      unsigned int rf_major,
+		      unsigned int rf_minor,
+		      unsigned int usb_major,
+		      unsigned int usb_minor);
 
     static void message_received(void* user_data,
 				 mci_rx_event event,
@@ -53,23 +54,24 @@ private:
 				 mci_rx_datatype data_type,
 				 int value,
 				 int signal,
-				 mci_battery_status battery);
+				 mgw_rx_battery battery);
 
     static void ack_received(void* user_data,
 			     int success,
 			     int message_id);
 
-    virtual void Relno(int rf_major,
-		       int rf_minor,
-		       int usb_major,
-		       int usb_minor) {}
+    virtual void Relno(int status,
+		       unsigned int rf_major,
+		       unsigned int rf_minor,
+		       unsigned int usb_major,
+		       unsigned int usb_minor) {}
 
     virtual void MessageReceived(mci_rx_event event,
 				 int datapoint,
 				 mci_rx_datatype data_type,
 				 int value,
 				 int signal,
-				 mci_battery_status battery) {}
+				 mgw_rx_battery battery) {}
 
     virtual void AckReceived(int success,
 			     int message_id) {}
