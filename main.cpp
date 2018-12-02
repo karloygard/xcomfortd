@@ -191,7 +191,7 @@ XCtoMQTT::AckReceived(int success, int message_id)
 	    }
 
 	if (verbose)
-	    Info("received spurious ack; message timeout is possibly too low\n");
+	    Info("received spurious ack %d; message timeout is possibly too low\n", message_id);
     }
 }
 
