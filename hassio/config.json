@@ -1,0 +1,11 @@
+{
+  "name": "XComfort",
+  "version": "0.1",
+  "slug": "xcomfort",
+  "description": "Eaton XComfort to MQTT gateway",
+  "startup": "before",
+  "boot": "auto",
+  "devices": ["/dev/bus/usb:/dev/bus/usb:rwm"],
+  "options": {},
+  "schema": {}
+}
