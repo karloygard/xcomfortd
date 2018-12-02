@@ -290,8 +290,14 @@ XCtoMQTT::TrySendMore()
 			    value = dp->sent_value;
 
 			if (verbose)
-			    Info("message %d was lost; retrying (new id %d)\n",
-				 dp->active_message_id, next_message_id);
+                        {
+			    if (dp->event == MGW_TE_REQUEST)
+			        Info("message %d was lost; retrying status request from DP %d (new id %d)\n",
+				     dp->active_message_id, dp->datapoint, next_message_id);
+                            else
+			        Info("message %d was lost; retrying setting DP %d to %d (new id %d)\n",
+				     dp->active_message_id, dp->datapoint, value, next_message_id);
+		        }
 		    }
 		    else
 		    {
