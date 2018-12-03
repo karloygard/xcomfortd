@@ -162,33 +162,43 @@ XCtoMQTT::AckReceived(int success, int seq_no, int extra)
             // messages, if any
 
             if (verbose)
+            {
                 if (success)
                     Info("Seq no %d acked after %d ms (extra %d)\n", seq_no, int(getmseconds() - (dp->timeout - 5500)), extra);
                 else
                     Info("Seq no %d failed after %d ms, retrying\n", seq_no, int(getmseconds() - (dp->timeout - 5500)));
+            }
 
             dp->active_message_id = -1;
 
-            if (dp->new_value != -1 || !success)
+            if (dp->new_value != -1)
                 // Send next value asap
 
                 dp->timeout = 0;
             else
-            {
-                // No new value to send, set up status request to
-                // be sent if status is not received within
-                // reasonable time
-
-                if (dp->event != MGW_TE_REQUEST)
+                if (!success && dp->retries < 5)
                 {
-                    dp->event = MGW_TE_REQUEST;
-                    dp->retries = 0;
+                    // Resend on failure
+
+                    dp->new_value = dp->sent_value;
+                    dp->timeout = 0;
                 }
+                else
+                {
+                    // No new value to send, set up status request to
+                    // be sent if status is not received within
+                    // reasonable time
 
-                // Give time to get status
+                    if (dp->event != MGW_TE_REQUEST)
+                    {
+                        dp->event = MGW_TE_REQUEST;
+                        dp->retries = 0;
+                    }
 
-                dp->timeout = getmseconds() + 1000;
-            }
+                    // Give time to get status
+
+                    dp->timeout = getmseconds() + 1000;
+                }
 
             return;
         }
@@ -310,13 +320,13 @@ XCtoMQTT::TrySendMore()
 			    if (verbose)
 				Info("requesting status from DP %d (seq no %d, try %d)\n",
 				     dp->datapoint, next_message_id, dp->retries);
-
-			    dp->retries++;
 			}
 			else
 			    if (verbose)
 				Info("setting DP %d to %d (seq no %d)\n",
 				     dp->datapoint, value, next_message_id);
+
+                        dp->retries++;
 		    }
 
 		    dp->active_message_id = next_message_id;
