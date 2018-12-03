@@ -23,7 +23,7 @@ struct datapoint_change
     int sent_value;
 
     // number of status requests sent
-    int sent_status_requests;
+    int retries;
 
     // Event to be sent
     mci_tx_event event;

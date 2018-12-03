@@ -134,7 +134,7 @@ XCtoMQTT::MessageReceived(mci_rx_event event,
 		    if (dp->event == MGW_TE_REQUEST)
 			// We're done
 
-			dp->sent_status_requests = 3;
+			dp->retries = 5;
 
 		    break;
 		}
@@ -155,46 +155,46 @@ XCtoMQTT::AckReceived(int success, int seq_no, int extra)
 
 	messages_in_transit = 0;
 
-    if (seq_no >= 0)
-    {
-	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
-	    if (dp->active_message_id == seq_no)
-	    {
-		// We got an ack for this message; clear to send next
-		// messages, if any
+    for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
+        if (dp->active_message_id == seq_no)
+        {
+            // We got an ack for this message; clear to send next
+            // messages, if any
 
-		if (verbose)
-		    Info("Seq no %d acked after %d ms (extra %d)\n", seq_no, int(getmseconds() - (dp->timeout - 5500)), extra);
+            if (verbose)
+                if (success)
+                    Info("Seq no %d acked after %d ms (extra %d)\n", seq_no, int(getmseconds() - (dp->timeout - 5500)), extra);
+                else
+                    Info("Seq no %d failed after %d ms, retrying\n", seq_no, int(getmseconds() - (dp->timeout - 5500)));
 
-		dp->active_message_id = -1;
+            dp->active_message_id = -1;
 
-		if (dp->new_value != -1)
-		    // Send next value asap
+            if (dp->new_value != -1 || !success)
+                // Send next value asap
 
-		    dp->timeout = 0;
-		else
-		{
-		    // No new value to send, set up status request to
-		    // be sent if status is not received within
-		    // reasonable time
+                dp->timeout = 0;
+            else
+            {
+                // No new value to send, set up status request to
+                // be sent if status is not received within
+                // reasonable time
 
-		    if (dp->event != MGW_TE_REQUEST)
-		    {
-			dp->event = MGW_TE_REQUEST;
-			dp->sent_status_requests = 0;
-		    }
+                if (dp->event != MGW_TE_REQUEST)
+                {
+                    dp->event = MGW_TE_REQUEST;
+                    dp->retries = 0;
+                }
 
-		    // Give time to get status
+                // Give time to get status
 
-		    dp->timeout = getmseconds() + 1000;
-		}
+                dp->timeout = getmseconds() + 1000;
+            }
 
-		return;
-	    }
+            return;
+        }
 
-	if (verbose)
-	    Info("received spurious ack %d; message timeout is possibly too low\n", seq_no);
-    }
+    if (verbose)
+        Info("received spurious ack %d; message timeout is possibly too low\n", seq_no);
 }
 
 void
@@ -241,7 +241,7 @@ XCtoMQTT::SendDPValue(int datapoint, int value, mci_tx_event event)
 	change_buffer = dp;
     }
 
-    dp->sent_status_requests = 0;
+    dp->retries = 0;
 }
 
 void
@@ -274,7 +274,7 @@ XCtoMQTT::TrySendMore()
 		if (dp->active_message_id != -1 ||
 		    dp->new_value != -1 ||
 		    (dp->event == MGW_TE_REQUEST &&
-		     dp->sent_status_requests < 3))
+		     dp->retries < 5))
 		{
 		    // Unacked or unsent; needs attention
 
@@ -309,9 +309,9 @@ XCtoMQTT::TrySendMore()
 			{
 			    if (verbose)
 				Info("requesting status from DP %d (seq no %d, try %d)\n",
-				     dp->datapoint, next_message_id, dp->sent_status_requests);
+				     dp->datapoint, next_message_id, dp->retries);
 
-			    dp->sent_status_requests++;
+			    dp->retries++;
 			}
 			else
 			    if (verbose)

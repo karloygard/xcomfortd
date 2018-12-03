@@ -204,7 +204,7 @@ void xc_parse_packet(const unsigned char* buffer, size_t size, xc_parse_data* da
         }
 
         if (seq_and_pri != -1)
-	    data->ack(data->user_data, buffer[2] == 0x1c, seq_and_pri >> 4, extra);
+	    data->ack(data->user_data, msg->pt_status.type != MGW_STT_ERROR, seq_and_pri >> 4, extra);
 
 	break;
     }
