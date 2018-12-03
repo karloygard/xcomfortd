@@ -240,7 +240,7 @@ struct xc_ci_message
 	    unsigned char  unknown;
 	    unsigned char  rssi;            // range 0 - 120
 	    unsigned char  battery;         // see BatteryStatus
-	    unsigned char  sequence_number; // 0-15 monotonously increasing
+	    unsigned char  seqno;           // 0-15 monotonously increasing
 	}                  packet_rx;
 	struct
 	{
@@ -259,11 +259,13 @@ typedef void (*xc_recv_fn)(void* user_data,
 			   enum mci_rx_datatype,
 			   int,
 			   int,
-			   enum mgw_rx_battery);
+			   enum mgw_rx_battery,
+			   int);
 
 typedef void (*xc_ack_fn)(void* user_data,
 			  int success,
-			  int message_id);
+			  int seq_no,
+			  int extra);
 
 typedef void (*xc_relno_fn)(void* user_data,
 			    int status,

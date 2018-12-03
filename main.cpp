@@ -90,16 +90,18 @@ XCtoMQTT::MessageReceived(mci_rx_event event,
 			  mci_rx_datatype data_type,
 			  int value,
 			  int rssi,
-			  mgw_rx_battery battery)
+			  mgw_rx_battery battery,
+			  int seq_no)
 {
     if (verbose)
-	Info("received MGW_PT_RX(%s): datapoint: %d value_type: %d value: %d (signal: %s) (battery: %s)\n",
+	Info("received MGW_PT_RX(%s): datapoint: %d value_type: %d value: %d (signal: %s) (battery: %s) (seq no: %d)\n",
              xc_rxevent_name(event),
 	     datapoint,
 	     data_type,
 	     value,
              xc_rssi_status_name(rssi),
-             xc_battery_status_name(battery));
+             xc_battery_status_name(battery),
+             seq_no);
 
     switch (event)
     {
@@ -145,7 +147,7 @@ XCtoMQTT::MessageReceived(mci_rx_event event,
 }
 
 void
-XCtoMQTT::AckReceived(int success, int message_id)
+XCtoMQTT::AckReceived(int success, int seq_no, int extra)
 {
     if (--messages_in_transit < 0)
 	/* Messages can be acked after we have given up waiting for
@@ -153,16 +155,16 @@ XCtoMQTT::AckReceived(int success, int message_id)
 
 	messages_in_transit = 0;
 
-    if (message_id >= 0)
+    if (seq_no >= 0)
     {
 	for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
-	    if (dp->active_message_id == message_id)
+	    if (dp->active_message_id == seq_no)
 	    {
 		// We got an ack for this message; clear to send next
 		// messages, if any
 
 		if (verbose)
-		    Info("Message id %d acked after %d ms\n", message_id, int(getmseconds() - (dp->timeout - 5500)));
+		    Info("Seq no %d acked after %d ms (extra %d)\n", seq_no, int(getmseconds() - (dp->timeout - 5500)), extra);
 
 		dp->active_message_id = -1;
 
@@ -191,7 +193,7 @@ XCtoMQTT::AckReceived(int success, int message_id)
 	    }
 
 	if (verbose)
-	    Info("received spurious ack %d; message timeout is possibly too low\n", message_id);
+	    Info("received spurious ack %d; message timeout is possibly too low\n", seq_no);
     }
 }
 
@@ -245,7 +247,7 @@ XCtoMQTT::SendDPValue(int datapoint, int value, mci_tx_event event)
 void
 XCtoMQTT::TrySendMore()
 {
-    if (messages_in_transit >= 4)
+    if (messages_in_transit >= 1)
 	/* Number of messages we can run in parallel.
 	   
            The stick appears to run into issues when handling multiple
@@ -306,14 +308,14 @@ XCtoMQTT::TrySendMore()
 			if (dp->event == MGW_TE_REQUEST)
 			{
 			    if (verbose)
-				Info("requesting status from DP %d (message id %d, try %d)\n",
+				Info("requesting status from DP %d (seq no %d, try %d)\n",
 				     dp->datapoint, next_message_id, dp->sent_status_requests);
 
 			    dp->sent_status_requests++;
 			}
 			else
 			    if (verbose)
-				Info("setting DP %d to %d (message id %d)\n",
+				Info("setting DP %d to %d (seq no %d)\n",
 				     dp->datapoint, value, next_message_id);
 		    }
 

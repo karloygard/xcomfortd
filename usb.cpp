@@ -70,7 +70,8 @@ USB::message_received(void* user_data,
 		      mci_rx_datatype data_type,
 		      int value,
 		      int signal,
-		      mgw_rx_battery battery)
+		      mgw_rx_battery battery,
+		      int seq_no)
 {
     USB* this_object = (USB*) user_data;
 
@@ -79,17 +80,19 @@ USB::message_received(void* user_data,
 				 data_type,
 				 value,
 				 signal,
-				 battery);
+				 battery,
+                                 seq_no);
 }
 
 void
 USB::ack_received(void* user_data,
 		   int success,
-		   int message_id)
+		   int seq_no,
+		   int extra)
 {
     USB* this_object = (USB*) user_data;
 
-    this_object->AckReceived(success, message_id);
+    this_object->AckReceived(success, seq_no, extra);
 }
 
 void
@@ -254,7 +257,7 @@ USB::Init(int fd)
     if (err < 0)
 	return false;
 
-    xc_make_config_msg((char*) sendbuf, MGW_CT_RELEASE, 0x10);
+    xc_make_config_msg((char*) sendbuf, MGW_CT_RELEASE, 0x0);
     
     err = libusb_submit_transfer(send_transfer);
     if (err < 0)

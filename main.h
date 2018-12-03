@@ -68,9 +68,10 @@ private:
 				 mci_rx_datatype data_type,
 				 int value,
 				 int signal,
-				 mgw_rx_battery battery);
+				 mgw_rx_battery battery,
+				 int seq_no);
 
-    virtual void AckReceived(int success, int message_id);
+    virtual void AckReceived(int success, int seq_no, int extra);
 
     /* Linked list that keeps track of requested datapoint changes.
        This buffers requests, in order to prevent overloading the
@@ -78,7 +79,7 @@ private:
 
     datapoint_change* change_buffer;
 
-    // Next message id (0 to 255 looping)
+    // Next sequence no (0 to 15 looping)
 
     int next_message_id;
 

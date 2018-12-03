@@ -110,14 +110,16 @@ void xc_parse_packet(const unsigned char* buffer, size_t size, xc_parse_data* da
 		   (enum mci_rx_datatype) msg->packet_rx.rx_data_type,
 		   msg->packet_rx.value,
 		   msg->packet_rx.rssi,
-		   (enum mgw_rx_battery) msg->packet_rx.battery);
+		   (enum mgw_rx_battery) msg->packet_rx.battery,
+		   msg->packet_rx.seqno);
 
 	break;
     
     case MGW_PT_STATUS:
     {
         int i;
-	int message_id = -1;
+	int seq_and_pri = -1;
+	int extra = -1;
 
         // The ACK parsing isn't completely understood
 
@@ -157,22 +159,24 @@ void xc_parse_packet(const unsigned char* buffer, size_t size, xc_parse_data* da
             return;
 
         case MGW_STT_OK:
-	    message_id = buffer[4];
+	    seq_and_pri = buffer[4];
+	    extra = buffer[5];
             break;
 
         case MGW_STT_ERROR:
             printf("error message: ");
 
+	    seq_and_pri = buffer[5];
+	    extra = buffer[4];
+
             switch (msg->pt_status.status)
             {
             case MGW_STS_GENERAL:
                 printf("general error\n");
-	        message_id = (unsigned char) buffer[5];
                 break;
 
             case MGW_STS_UNKNOWN:
                 printf("unknown command\n");
-	        message_id = (unsigned char) buffer[5];
                 break;
 
             case MGW_STS_DP_OOR:
@@ -193,13 +197,13 @@ void xc_parse_packet(const unsigned char* buffer, size_t size, xc_parse_data* da
 
             case MGW_STS_NO_ACK:
                 printf("timeout; no ack received\n");
-		message_id = (unsigned char) buffer[4];
                 break;
             }
             break;
         }
 
-	data->ack(data->user_data, buffer[2] == 0x1c, message_id >> 4);
+        if (seq_and_pri != -1)
+	    data->ack(data->user_data, buffer[2] == 0x1c, seq_and_pri >> 4, extra);
 
 	break;
     }
@@ -214,7 +218,7 @@ void xc_parse_packet(const unsigned char* buffer, size_t size, xc_parse_data* da
     }
 }
 
-void xc_make_jalo_msg(char* buffer, int datapoint, mci_sb_command cmd, int message_id)
+void xc_make_jalo_msg(char* buffer, int datapoint, mci_sb_command cmd, int seq_no)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
@@ -223,10 +227,10 @@ void xc_make_jalo_msg(char* buffer, int datapoint, mci_sb_command cmd, int messa
     message->packet_tx.datapoint = datapoint;
     message->packet_tx.tx_event = MGW_TE_JALO;
     message->packet_tx.value = cmd;
-    message->packet_tx.seq_and_pri = message_id << 4;
+    message->packet_tx.seq_and_pri = seq_no << 4;
 }
 
-void xc_make_dim_msg(char* buffer, int datapoint, int value, int message_id)
+void xc_make_dim_msg(char* buffer, int datapoint, int value, int seq_no)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
@@ -235,10 +239,10 @@ void xc_make_dim_msg(char* buffer, int datapoint, int value, int message_id)
     message->packet_tx.datapoint = datapoint;
     message->packet_tx.tx_event = MGW_TE_DIM;
     message->packet_tx.value = (value << 8) + 0x40;
-    message->packet_tx.seq_and_pri = message_id << 4;
+    message->packet_tx.seq_and_pri = seq_no << 4;
 }
 
-void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
+void xc_make_switch_msg(char* buffer, int datapoint, int on, int seq_no)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
@@ -247,10 +251,10 @@ void xc_make_switch_msg(char* buffer, int datapoint, int on, int message_id)
     message->packet_tx.datapoint = datapoint;
     message->packet_tx.tx_event = MGW_TE_SWITCH;
     message->packet_tx.value = on;
-    message->packet_tx.seq_and_pri = message_id << 4;
+    message->packet_tx.seq_and_pri = seq_no << 4;
 }
 
-void xc_make_request_msg (char* buffer, int datapoint, int message_id)
+void xc_make_request_msg (char* buffer, int datapoint, int seq_no)
 {
     struct xc_ci_message* message = (struct xc_ci_message*) buffer;
 
@@ -258,7 +262,7 @@ void xc_make_request_msg (char* buffer, int datapoint, int message_id)
     message->type = MGW_PT_TX;
     message->packet_tx.datapoint = datapoint;
     message->packet_tx.tx_event = MGW_TE_REQUEST;
-    message->packet_tx.seq_and_pri = message_id << 4;
+    message->packet_tx.seq_and_pri = seq_no << 4;
 }
 
 void xc_make_config_msg(char* buffer, int type, int mode)

@@ -54,11 +54,13 @@ private:
 				 mci_rx_datatype data_type,
 				 int value,
 				 int signal,
-				 mgw_rx_battery battery);
+				 mgw_rx_battery battery,
+				 int seq_no);
 
     static void ack_received(void* user_data,
 			     int success,
-			     int message_id);
+			     int seq_no,
+			     int extra);
 
     virtual void Relno(int status,
 		       unsigned int rf_major,
@@ -71,10 +73,12 @@ private:
 				 mci_rx_datatype data_type,
 				 int value,
 				 int signal,
-				 mgw_rx_battery battery) {}
+				 mgw_rx_battery battery,
+				 int seq_no) {}
 
     virtual void AckReceived(int success,
-			     int message_id) {}
+			     int seq_no,
+			     int extra) {}
 
     static void sent(struct libusb_transfer* transfer);
     static void received(struct libusb_transfer* transfer);
