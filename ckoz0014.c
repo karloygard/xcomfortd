@@ -197,6 +197,7 @@ void xc_parse_packet(const unsigned char* buffer, size_t size, xc_parse_data* da
 
             case MGW_STS_NO_ACK:
                 printf("timeout; no ack received\n");
+                seq_and_pri = buffer[4];
                 break;
             }
             break;
