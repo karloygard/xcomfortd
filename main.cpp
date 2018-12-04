@@ -85,6 +85,32 @@ XCtoMQTT::Relno(int status,
 }
 
 void
+XCtoMQTT::PublishStatus(int datapoint,
+                        int value)
+{
+    // Received message that datapoint value changed
+
+    char topic[128];
+    char state[128];
+
+    snprintf(topic, 128, "xcomfort/%d/get/dimmer", datapoint);
+    snprintf(state, 128, "%d", value);
+
+    if (mosquitto_publish(mosq, NULL, topic, strlen(state), (const uint8_t*) state, 1, true))
+        Error("failed to publish message\n");
+
+    snprintf(topic, 128, "xcomfort/%d/get/switch", datapoint);
+
+    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
+        Error("failed to publish message\n");
+
+    snprintf(topic, 128, "xcomfort/%d/get/shutter", datapoint);
+
+    if (mosquitto_publish(mosq, NULL, topic, strlen(xc_shutter_status_name(value)), xc_shutter_status_name(value), 1, true))
+        Error("failed to publish message\n");
+}
+
+void
 XCtoMQTT::MessageReceived(mci_rx_event event,
 			  int datapoint,
 			  mci_rx_datatype data_type,
@@ -107,26 +133,7 @@ XCtoMQTT::MessageReceived(mci_rx_event event,
     {
     case MSG_STATUS:
         {
-            // Received message that datapoint value changed
-
-	    char topic[128];
-	    char state[128];
-	    
-	    snprintf(topic, 128, "xcomfort/%d/get/dimmer", datapoint);
-	    snprintf(state, 128, "%d", value);
-	    
-	    if (mosquitto_publish(mosq, NULL, topic, strlen(state), (const uint8_t*) state, 1, true))
-		Error("failed to publish message\n");
-	    
-	    snprintf(topic, 128, "xcomfort/%d/get/switch", datapoint);
-	    
-	    if (mosquitto_publish(mosq, NULL, topic, value ? 4 : 5, value ? "true" : "false", 1, true))
-		Error("failed to publish message\n");
-
-	    snprintf(topic, 128, "xcomfort/%d/get/shutter", datapoint);
-
-	    if (mosquitto_publish(mosq, NULL, topic, strlen(xc_shutter_status_name(value)), xc_shutter_status_name(value), 1, true))
-		Error("failed to publish message\n");
+            PublishStatus(datapoint, value);
 
 	    for (datapoint_change* dp = change_buffer; dp; dp = dp->next)
 		if (dp->datapoint == datapoint)
@@ -161,6 +168,8 @@ XCtoMQTT::AckReceived(int success, int seq_no, int extra)
             // We got an ack for this message; clear to send next
             // messages, if any
 
+            dp->active_message_id = -1;
+
             if (verbose)
             {
                 if (success)
@@ -169,35 +178,20 @@ XCtoMQTT::AckReceived(int success, int seq_no, int extra)
                     Info("Seq no %d failed after %d ms, retrying\n", seq_no, int(getmseconds() - (dp->timeout - 5500)));
             }
 
-            dp->active_message_id = -1;
+            if (success && dp->event != MGW_TE_REQUEST)
+                PublishStatus(dp->datapoint, dp->sent_value);
 
             if (dp->new_value != -1)
-                // Send next value asap
+                // Value was updated; send asap
 
                 dp->timeout = 0;
             else
-                if (!success && dp->retries < 5)
+                if (!success)
                 {
                     // Resend on failure
 
                     dp->new_value = dp->sent_value;
                     dp->timeout = 0;
-                }
-                else
-                {
-                    // No new value to send, set up status request to
-                    // be sent if status is not received within
-                    // reasonable time
-
-                    if (dp->event != MGW_TE_REQUEST)
-                    {
-                        dp->event = MGW_TE_REQUEST;
-                        dp->retries = 0;
-                    }
-
-                    // Give time to get status
-
-                    dp->timeout = getmseconds() + 1000;
                 }
 
             return;
@@ -230,6 +224,9 @@ XCtoMQTT::SendDPValue(int datapoint, int value, mci_tx_event event)
 
 	    dp->new_value = value;
 	    dp->event = event;
+
+            if (dp->active_message_id == -1)
+                dp->timeout = 0;
 	}
     }
     else
@@ -281,54 +278,44 @@ XCtoMQTT::TrySendMore()
 	    {
 		// Time to inspect this datapoint
 
-		if (dp->active_message_id != -1 ||
-		    dp->new_value != -1 ||
-		    (dp->event == MGW_TE_REQUEST &&
-		     dp->retries < 5))
+		if ((dp->active_message_id != -1 ||
+                     dp->new_value != -1 ||
+                     dp->event == MGW_TE_REQUEST) && dp->retries < 5)
 		{
 		    // Unacked or unsent; needs attention
 
 		    char buffer[9];
-		    bool waiting_for_ack = dp->active_message_id != -1;
+		    bool timed_out = dp->active_message_id != -1;
 		    int value;
 
-		    if (waiting_for_ack)
-		    {
-			// Was value updated in the meanwhile?
-			
-			if (dp->new_value != -1)
-			    value = dp->new_value;
-			else
-			    value = dp->sent_value;
+                    if (dp->new_value != -1)
+                        value = dp->new_value;
+                    else
+                        value = dp->sent_value;
 
-			if (verbose)
+                    if (verbose)
+                    {
+                        if (timed_out)
                         {
-			    if (dp->event == MGW_TE_REQUEST)
-			        Info("message %d was lost; retrying status request from DP %d (new id %d)\n",
-				     dp->active_message_id, dp->datapoint, next_message_id);
+                            if (dp->event == MGW_TE_REQUEST)
+			        Info("message %d was lost; retrying status request from DP %d (new id %d, retry %d)\n",
+				     dp->active_message_id, dp->datapoint, next_message_id, dp->retries);
                             else
-			        Info("message %d was lost; retrying setting DP %d to %d (new id %d)\n",
-				     dp->active_message_id, dp->datapoint, value, next_message_id);
-		        }
-		    }
-		    else
-		    {
-			value = dp->new_value;
-
-			if (dp->event == MGW_TE_REQUEST)
-			{
-			    if (verbose)
-				Info("requesting status from DP %d (seq no %d, try %d)\n",
+			        Info("message %d was lost; retrying setting DP %d to %d (new id %d, retry %d)\n",
+				     dp->active_message_id, dp->datapoint, value, next_message_id, dp->retries);
+                        }
+                        else
+                        {
+                            if (dp->event == MGW_TE_REQUEST)
+				Info("requesting status from DP %d (seq no %d, retry %d)\n",
 				     dp->datapoint, next_message_id, dp->retries);
-			}
-			else
-			    if (verbose)
-				Info("setting DP %d to %d (seq no %d)\n",
-				     dp->datapoint, value, next_message_id);
+                            else
+				Info("setting DP %d to %d (seq no %d, retry %d)\n",
+				     dp->datapoint, value, next_message_id, dp->retries);
+                        }
+                    }
 
-                        dp->retries++;
-		    }
-
+                    dp->retries++;
 		    dp->active_message_id = next_message_id;
 		    dp->new_value = -1;
 		    dp->sent_value = value;
@@ -364,7 +351,7 @@ XCtoMQTT::TrySendMore()
 
 		    Send(buffer, 9);
 
-		    if (!waiting_for_ack)
+		    if (!timed_out)
 			messages_in_transit++;
 
 		    return;

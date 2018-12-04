@@ -22,7 +22,7 @@ struct datapoint_change
     int new_value;
     int sent_value;
 
-    // number of status requests sent
+    // number of retries
     int retries;
 
     // Event to be sent
@@ -31,7 +31,7 @@ struct datapoint_change
     // Non zero when we're waiting for an ack
     int64_t timeout;
 
-    // The id we're waiting for an ack for
+    // The sequence number we're waiting for an ack for
     int active_message_id;
 };
 
@@ -56,6 +56,9 @@ private:
     void TrySendMore();
 
     void MQTTMessage(const struct mosquitto_message* message);
+
+    void PublishStatus(int datapoint,
+                       int value);
 
     virtual void Relno(int status,
 		       unsigned int rf_major,
