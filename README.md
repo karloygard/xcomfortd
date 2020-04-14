@@ -1,6 +1,8 @@
 xComfort gateway
 ================
 
+__Deprecated, development has moved to https://github.com/karloygard/xcomfortd-go.__
+
 This code implements communication with the Eaton xComfort CKOZ-00/14
 Communication stick (CI stick).  The CI stick needs to be added into
 the network with CKOZ-00/13.
